@@ -201,6 +201,12 @@ ToolInfo DependencyManager::detect(const QString& id)
             t.version = rc.value(QStringLiteral("Version/ProductKey")).toString().section(' ', -1); // "LibreOffice 24.2"
             if (t.version.isEmpty())
                 t.version = rc.value(QStringLiteral("Version/ProductMajor")).toString();
+            if (t.version.isEmpty()) { // Debian/Ubuntu builds: UpdateID=LibreOffice_24_en-US_...
+                const auto m = QRegularExpression(QStringLiteral("LibreOffice_(\\d+(?:\\.\\d+)?)"))
+                                   .match(rc.value(QStringLiteral("Version/UpdateID")).toString());
+                if (m.hasMatch())
+                    t.version = m.captured(1);
+            }
         }
 #endif
     } else if (id == "tesseract") {

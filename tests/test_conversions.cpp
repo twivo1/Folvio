@@ -174,11 +174,11 @@ TEST(Convert, DocxToPdfAndPdfToDocx)
                               {back.outputs.first()}))
             << "the DOCX must contain the PDF's text";
     } else {
-        const auto txt = convert(back.outputs.first(), "txt", dir.path());
-        ASSERT_TRUE(txt.ok) << txt.error.toStdString();
-        QFile t(txt.outputs.first());
-        ASSERT_TRUE(t.open(QIODevice::ReadOnly));
-        EXPECT_TRUE(QString::fromUtf8(t.readAll()).contains("4711"));
+        // Without Python: render the DOCX again (text boxes included) and look for the text in the PDF.
+        QTemporaryDir again;
+        const auto rendered = convert(back.outputs.first(), "pdf", again.path());
+        ASSERT_TRUE(rendered.ok) << rendered.error.toStdString();
+        EXPECT_TRUE(pdfText(rendered.outputs.first()).contains("4711")) << pdfText(rendered.outputs.first()).toStdString();
     }
 }
 

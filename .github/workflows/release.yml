@@ -42,10 +42,12 @@ jobs:
       - name: Build environment image
         run: docker build -t folvio-build packaging/linux
       - name: Build, all tests, AppImage and .deb
-        run: docker run --rm -v "$PWD:/src" -w /src folvio-build packaging/linux/build_linux.sh
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src folvio-build packaging/linux/build_linux.sh
+          sudo chown -R "$(id -u):$(id -g)" dist build
       - name: Clean systems - AppImage and .deb with engines (Ubuntu 24.04, 26.04, Fedora 43)
         run: |
-          set -e
+          set -eo pipefail
           for combo in "ubuntu:24.04 appimage yes" "ubuntu:24.04 deb yes" "ubuntu:24.04 appimage no" \
                        "ubuntu:26.04 appimage yes" "ubuntu:26.04 deb yes" "fedora:43 appimage yes"; do
             set -- $combo
@@ -78,6 +80,9 @@ jobs:
       - name: Engines the way Folvio installs them for users (winget - FFmpeg, LibreOffice, Tesseract)
         shell: pwsh
         run: packaging/windows/install_engines.ps1
+      - name: Python packages used by the tests (independent PDF reader, EXIF writer)
+        shell: pwsh
+        run: python -m pip install --quiet pypdf==7.1.1 pillow==13.0.0
       - name: Build, all tests (with engines), deployment, self-test, installer
         shell: pwsh
         run: packaging/build_release.ps1 -QtDir C:\Qt\6.10.0\mingw_64 -QtTools C:\Qt\Tools
