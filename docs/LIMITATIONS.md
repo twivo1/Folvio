@@ -35,6 +35,18 @@ Folvio 0.9 is a working pre-release, not a production-certified product.
 * AVIF encoding and HEIC decoding depend on the FFmpeg build (verified with the gyan.dev full build).
 * Word-based conversions cannot be force-killed if Word itself hangs (it is a COM server outside the job object).
 
+## Combine
+* *Auto* proportions come from a camera model. If the page is only tilted forwards/backwards (one pair of edges
+  parallel in the photo) the focal length cannot be measured and a typical phone lens is assumed — the ratio can
+  then be off by a few percent; choose A4/Letter/Custom when the paper size is known.
+* Page detection needs some contrast between the page and the background (white paper on a white desk is
+  often not found); the corners can always be placed by hand.
+* Images pasted from a browser as remote links are not downloaded (only bitmaps and local files are imported).
+* HEIC/AVIF import requires FFmpeg with the corresponding decoder.
+* Pen pressure is exported as segments of different widths (not a single variable-width outline); the eraser
+  removes shapes and text boxes as a whole.
+* Text annotations use the fonts installed in Windows; a font without a needed glyph falls back to Arial.
+
 ## Roadmap
 1. Visual whiteout + retype for scanned pages using OCR boxes.
 2. Reuse of embedded fonts when all needed glyphs are present.

@@ -156,6 +156,8 @@ Banner::Banner(QWidget* parent) : QFrame(parent)
 
 void Banner::show(Kind kind, const QString& text, const QStringList& actions)
 {
+    m_kind = kind;
+    m_hasActions = !actions.isEmpty();
     const char* k = kind == Kind::Info ? "info" : kind == Kind::Warning ? "warning" : kind == Kind::Error ? "error" : "success";
     setProperty("kind", k);
     style()->unpolish(this);

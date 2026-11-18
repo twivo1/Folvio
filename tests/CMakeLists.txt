@@ -15,7 +15,8 @@ add_executable(folvio_tests
     test_autochange.cpp
     test_conversions.cpp
     test_editor.cpp
-    test_regression_p0.cpp)
+    test_regression_p0.cpp
+    test_combine.cpp)
 target_link_libraries(folvio_tests PRIVATE folvio_lib GTest::gtest Qt6::Test)
 target_compile_definitions(folvio_tests PRIVATE FOLVIO_FIXTURES="${CMAKE_SOURCE_DIR}/tests/fixtures")
 add_custom_command(TARGET folvio_tests POST_BUILD

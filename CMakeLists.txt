@@ -35,6 +35,13 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
+# OpenCV (core + imgproc, Apache-2.0), built statically by tools/build_opencv.ps1
+# ---------------------------------------------------------------------------
+set(OpenCV_STATIC ON)
+find_package(OpenCV 4.10 REQUIRED COMPONENTS core imgproc
+             PATHS "${CMAKE_SOURCE_DIR}/third_party/opencv" NO_DEFAULT_PATH)
+
+# ---------------------------------------------------------------------------
 # Core library: everything except main(). Linked by the app and the tests.
 # ---------------------------------------------------------------------------
 file(GLOB_RECURSE FOLVIO_SOURCES CONFIGURE_DEPENDS
@@ -45,7 +52,7 @@ list(FILTER FOLVIO_SOURCES EXCLUDE REGEX ".*/src/app/main\\.cpp$")
 add_library(folvio_lib STATIC ${FOLVIO_SOURCES} "${CMAKE_SOURCE_DIR}/assets/resources.qrc")
 target_include_directories(folvio_lib PUBLIC "${CMAKE_SOURCE_DIR}/src")
 target_link_libraries(folvio_lib PUBLIC
-    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Concurrent pdfium)
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg Qt6::Concurrent pdfium ${OpenCV_LIBS})
 target_compile_definitions(folvio_lib PUBLIC
     FOLVIO_VERSION="${PROJECT_VERSION}"
     UNICODE _UNICODE)

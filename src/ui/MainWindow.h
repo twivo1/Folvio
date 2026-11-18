@@ -20,6 +20,9 @@ class PdfWorkspace;
 class RecentPage;
 class RichWorkspace;
 class SettingsPage;
+namespace combine {
+class CombineWorkspace;
+}
 
 // AUTO CHANGE page: empty state, native PDF workspace or reflow document workspace.
 class WorkspacePage : public QWidget {
@@ -53,7 +56,7 @@ private:
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    enum Page { Home = 0, Convert, AutoChange, Batch, Recent, Settings };
+    enum Page { Home = 0, Convert, AutoChange, Batch, Recent, Settings, Combine };
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
@@ -62,6 +65,7 @@ public:
     void openForConversion(const QString& path);
     void showPage(Page page);
     void demoEditFirstParagraph(); // diagnostics: opens the inline editor on the first paragraph
+    combine::CombineWorkspace* combineWorkspace() const { return m_combine; }
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -83,6 +87,7 @@ private:
     BatchPage* m_batch = nullptr;
     RecentPage* m_recent = nullptr;
     SettingsPage* m_settings = nullptr;
+    combine::CombineWorkspace* m_combine = nullptr;
     QLabel* m_brand = nullptr;
     QLabel* m_statusFormat = nullptr;
     QLabel* m_statusPages = nullptr;

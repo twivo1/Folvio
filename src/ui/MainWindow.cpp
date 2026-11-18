@@ -1,5 +1,6 @@
 #include "ui/MainWindow.h"
 
+#include "combine/CombineWorkspace.h"
 #include "core/files/FileFormat.h"
 #include "core/jobs/ConversionJob.h"
 #include "core/persistence/Database.h"
@@ -200,7 +201,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     m_batch = new BatchPage(m_queue, m_pages);
     m_recent = new RecentPage(m_pages);
     m_settings = new SettingsPage(m_pages);
-    for (QWidget* w : std::initializer_list<QWidget*>{m_home, m_convert, m_workspace, m_batch, m_recent, m_settings})
+    m_combine = new combine::CombineWorkspace(m_pages);
+    for (QWidget* w : std::initializer_list<QWidget*>{m_home, m_convert, m_workspace, m_batch, m_recent, m_settings, m_combine})
         m_pages->addWidget(w);
     layout->addWidget(m_pages, 1);
     setCentralWidget(central);
@@ -218,6 +220,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
     connect(m_convert, &ConvertPage::openForEditing, this, &MainWindow::openForEditing);
     connect(m_convert, &ConvertPage::statusMessage, m_statusMessage, &QLabel::setText);
     connect(m_batch, &BatchPage::statusMessage, m_statusMessage, &QLabel::setText);
+    connect(m_combine, &combine::CombineWorkspace::statusMessage, m_statusMessage, &QLabel::setText);
     connect(m_workspace, &WorkspacePage::statusChanged, this, &MainWindow::updateStatus);
     connect(m_workspace, &WorkspacePage::documentOpened, this, [this](const QString& path) {
         setWindowTitle(QStringLiteral("%1 — Folvio").arg(QFileInfo(path).fileName()));
@@ -308,6 +311,7 @@ QWidget* MainWindow::buildSidebar()
         {Home, "home", tr("Home"), "Ctrl+1"},
         {Convert, "convert", tr("Convert"), "Ctrl+2"},
         {AutoChange, "edit", tr("Auto Change"), "Ctrl+3"},
+        {Combine, "combine", tr("Combine"), "Ctrl+6"},
         {Batch, "batch", tr("Batch"), "Ctrl+4"},
         {Recent, "recent", tr("Recent Files"), "Ctrl+5"},
         {Settings, "settings", tr("Settings"), "Ctrl+,"},
@@ -390,6 +394,8 @@ void MainWindow::showPage(Page page)
         m_home->refresh();
     if (page == Recent)
         m_recent->refresh();
+    if (page == Combine)
+        QTimer::singleShot(0, m_combine, &combine::CombineWorkspace::offerSessionRecovery);
     updateStatus();
 }
 
@@ -458,7 +464,7 @@ void MainWindow::restoreGeometryFromSettings()
 
 void MainWindow::closeEvent(QCloseEvent* e)
 {
-    if (!m_workspace->maybeClose()) {
+    if (!m_workspace->maybeClose() || !m_combine->prepareClose()) {
         e->ignore();
         return;
     }

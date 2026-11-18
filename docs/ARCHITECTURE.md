@@ -20,6 +20,8 @@ src/
 ├── editor/
 │   ├── pdf_native/      Auto Change: PdfTextLayout, PdfEditSession, FontMatcher, PdfCanvas, PdfWorkspace
 │   └── rich/            Reflow editing: RichDocumentIO, PagedDocumentView, RichWorkspace
+├── combine/             Combine: model + undo, ImageGeometry (homography, detection), AnnotationRender,
+│                        CombinePdfExporter, CombineSession (import, autosave, .folvio), PageCanvas, CombineWorkspace
 └── ui/                  MainWindow, pages, widgets, Theme (light/dark tokens), Icons
 engines/                 Runtime data shipped next to Folvio.exe (Word helper script, OCR language data)
 packaging/               Release script, Inno Setup script, Windows resources/manifest
@@ -74,6 +76,13 @@ tests/                   GoogleTest suite
    object by object (independent of paragraph detection): untouched pages have identical text; on edited pages
    the multiset of text objects equals original-minus-intentionally-removed plus inserted; every new line is
    present in content order; the saved objects equal the in-memory edited document.
+
+## Combine
+
+Images → arranged, straightened, annotated, multi-page PDF. Non-destructive: pages store parameters (rotation,
+four corners, crop, vector annotations) and pixels are produced on demand (preview at ≤2200 px, export at full
+resolution). Perspective correction uses OpenCV (`warpPerspective`, static `core` + `imgproc`), PDF output uses
+PDFium with vector annotations and real text. Details: [COMBINE.md](COMBINE.md).
 
 ## Safe saving (`SafeFileWriter`)
 

@@ -37,8 +37,8 @@ QByteArray fontFileData(const QString& path)
 
 const QRawFont& rawFont(const QString& path)
 {
-    static QHash<QString, QRawFont> cache;
-    QMutexLocker lock(&cacheMutex());
+    // QRawFont objects must not be shared between threads (GUI editing vs. export worker).
+    thread_local QHash<QString, QRawFont> cache;
     auto it = cache.find(path);
     if (it == cache.end())
         it = cache.insert(path, QRawFont(path, 100.0));

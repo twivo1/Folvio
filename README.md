@@ -10,6 +10,10 @@
   replaced safely (backup → temp file → verification → atomic swap → restore on failure).
 * **Reflow editing** – Word-like editing of DOCX/ODT/RTF/Markdown/HTML/TXT, and of PDFs reconstructed into an
   editable document (clearly marked as not lossless).
+* **Combine** – turn photos of paper pages, screenshots and scans into one PDF: arrange pages by drag & drop,
+  paste screenshots with `Ctrl+V`, straighten photographed pages with four corner handles (real perspective
+  correction, automatic page detection), crop, draw, highlight, add arrows, shapes and text, export with
+  chosen page size, orientation, margins and quality. See [docs/COMBINE.md](docs/COMBINE.md).
 * **Batch** – many files, one target format, parallel jobs with progress, cancel and retry.
 
 Works offline. No account, no telemetry, no uploads.
@@ -20,6 +24,8 @@ Requirements (Windows 11 x64): Qt 6.10 for MinGW 64-bit (with CMake and Ninja fr
 the installer. Optional engines: LibreOffice, FFmpeg, Tesseract, Microsoft Word.
 
 ```powershell
+# OpenCV (core + imgproc, static) is built once from source into third_party/opencv:
+#   powershell -ExecutionPolicy Bypass -File tools/build_opencv.ps1   (the release script does this when missing)
 # PDFium binaries are committed in third_party/pdfium; to refresh them:
 powershell -ExecutionPolicy Bypass -File tools\fetch_pdfium.ps1
 
@@ -43,6 +49,7 @@ redirection included) and an uninstaller. Per-user install by default, no admini
 ## Documentation
 
 * [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) – modules, data flow, safety model
+* [docs/COMBINE.md](docs/COMBINE.md) – Combine: processing pipeline, perspective correction, export
 * [docs/TECHNOLOGY_AUDIT.md](docs/TECHNOLOGY_AUDIT.md) – engine comparison, licences, decisions
 * [docs/TESTING.md](docs/TESTING.md) – test suite and how to run it
 * [docs/LIMITATIONS.md](docs/LIMITATIONS.md) – known limitations and roadmap

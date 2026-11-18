@@ -31,6 +31,12 @@ function Invoke-Checked([string]$exe, [string[]]$arguments) {
     if ($LASTEXITCODE -ne 0) { throw "$exe failed with exit code $LASTEXITCODE" }
 }
 
+if (-not (Test-Path (Join-Path $root 'third_party\opencv\OpenCVConfig.cmake'))) {
+    Write-Host "== Building OpenCV (first run only)" -ForegroundColor Cyan
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'toolsuild_opencv.ps1')
+    if ($LASTEXITCODE -ne 0) { throw "OpenCV build failed" }
+}
+
 Write-Host "== Configure & build (Release)" -ForegroundColor Cyan
 Invoke-Checked cmake @('-S', $root, '-B', $build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', "-DCMAKE_PREFIX_PATH=$QtDir")
 Invoke-Checked cmake @('--build', $build, '--parallel')
@@ -51,6 +57,9 @@ Copy-Item (Join-Path $root 'THIRD_PARTY_LICENSES.md') $app
 New-Item -ItemType Directory -Force (Join-Path $app 'licenses\pdfium') | Out-Null
 Copy-Item (Join-Path $root 'third_party\pdfium\LICENSE') (Join-Path $app 'licenses\pdfium\LICENSE')
 Copy-Item (Join-Path $root 'third_party\pdfium\licenses\*') (Join-Path $app 'licenses\pdfium')
+New-Item -ItemType Directory -Force (Join-Path $app 'licenses\opencv') | Out-Null
+Copy-Item (Join-Path $root 'third_party\opencv\LICENSE') (Join-Path $app 'licenses\opencv\LICENSE')
+Copy-Item (Join-Path $root 'third_party\opencv\etc\licenses\zlib-LICENSE') (Join-Path $app 'licenses\opencv\zlib-LICENSE')
 Invoke-Checked (Join-Path $QtDir 'bin\windeployqt.exe') @('--release', '--no-translations', '--no-system-d3d-compiler',
     '--no-opengl-sw', '--compiler-runtime', (Join-Path $app 'Folvio.exe'))
 

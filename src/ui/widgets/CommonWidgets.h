@@ -46,6 +46,8 @@ public:
     explicit Banner(QWidget* parent = nullptr);
     void show(Kind kind, const QString& text, const QStringList& actions = {});
     void setDetails(const QString& text);
+    Kind kind() const { return m_kind; }
+    bool hasActions() const { return m_hasActions; }
 
 Q_SIGNALS:
     void actionTriggered(int index);
@@ -56,6 +58,8 @@ private:
     QLabel* m_text;
     QHBoxLayout* m_actionsLayout;
     QList<QPushButton*> m_actionButtons;
+    Kind m_kind = Kind::Info;
+    bool m_hasActions = false;
 };
 
 QFrame* makeSeparator(QWidget* parent = nullptr);

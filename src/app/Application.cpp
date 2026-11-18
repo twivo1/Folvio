@@ -4,6 +4,7 @@
 #include "core/deps/DependencyManager.h"
 #include "core/files/PathUtils.h"
 #include "core/persistence/Database.h"
+#include "combine/CombineWorkspace.h"
 #include "ui/MainWindow.h"
 #include "ui/themes/Theme.h"
 #include "ui/widgets/Icons.h"
@@ -74,7 +75,11 @@ int runApplication(int argc, char* argv[])
     QCommandLineOption themeOpt(QStringLiteral("theme"), QStringLiteral("Force theme: light|dark."), QStringLiteral("mode"));
     QCommandLineOption delayOpt(QStringLiteral("screenshot-delay"), QStringLiteral("Delay in ms."), QStringLiteral("ms"), QStringLiteral("2500"));
     QCommandLineOption editOpt(QStringLiteral("demo-edit"), QStringLiteral("Click the first paragraph after opening (diagnostics)."));
-    for (const auto& o : {shotOpt, pageOpt, themeOpt, delayOpt, editOpt})
+    QCommandLineOption combineOpt(QStringLiteral("combine"), QStringLiteral("Import the given files into Combine (diagnostics)."));
+    QCommandLineOption combineToolOpt(QStringLiteral("combine-tool"), QStringLiteral("Open Combine Edit with a tool index (diagnostics)."), QStringLiteral("tool"));
+    QCommandLineOption combineDemoOpt(QStringLiteral("combine-demo"), QStringLiteral("Straighten and annotate the first Combine page (diagnostics)."));
+    QCommandLineOption combineStepOpt(QStringLiteral("combine-step"), QStringLiteral("Combine step 0..2 (diagnostics)."), QStringLiteral("step"));
+    for (const auto& o : {shotOpt, pageOpt, themeOpt, delayOpt, editOpt, combineOpt, combineToolOpt, combineDemoOpt, combineStepOpt})
         parser.addOption(o);
     parser.process(app);
 
@@ -100,8 +105,28 @@ int runApplication(int argc, char* argv[])
     MainWindow window;
     window.show();
     const QStringList files = parser.positionalArguments();
-    if (!files.isEmpty())
+    if (!files.isEmpty() && parser.isSet(combineOpt)) {
+        QTimer::singleShot(0, &window, [&window, files] {
+            window.showPage(MainWindow::Combine);
+            window.combineWorkspace()->importFiles(files);
+        });
+    } else if (!files.isEmpty()) {
         QTimer::singleShot(0, &window, [&window, files] { window.openFiles(files); });
+    }
+    if (parser.isSet(combineToolOpt) || parser.isSet(combineDemoOpt) || parser.isSet(combineStepOpt)) {
+        const int tool = parser.isSet(combineToolOpt) ? parser.value(combineToolOpt).toInt() : 0;
+        const bool demo = parser.isSet(combineDemoOpt);
+        const int step = parser.isSet(combineStepOpt) ? parser.value(combineStepOpt).toInt() : 1;
+        QTimer::singleShot(1200, &window, [&window, tool, demo, step] {
+            auto* ws = window.combineWorkspace();
+            ws->setStep(combine::CombineWorkspace::Step::Edit);
+            if (demo)
+                ws->runDiagnosticDemo();
+            ws->setTool(combine::PageCanvas::Tool(tool));
+            if (step != 1)
+                ws->setStep(combine::CombineWorkspace::Step(step));
+        });
+    }
     if (parser.isSet(pageOpt))
         QTimer::singleShot(10, &window, [&window, &parser, &pageOpt] { window.showPage(MainWindow::Page(parser.value(pageOpt).toInt())); });
     if (parser.isSet(editOpt))
