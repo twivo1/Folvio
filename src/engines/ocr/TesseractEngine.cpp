@@ -106,7 +106,10 @@ OcrPageResult TesseractEngine::recognize(const QImage& image, const QString& lan
     }
     ProcessSpec spec;
     spec.program = DependencyManager::instance().path("tesseract");
-    spec.arguments = {png, base, "--tessdata-dir", tessdata, "-l", languages, "--psm", "3", "tsv"};
+    // Request TSV via a variable rather than the "tsv" config file: the bundled
+    // tessdata folder contains only language models, no configs/ directory.
+    spec.arguments = {png, base, "--tessdata-dir", tessdata, "-l", languages, "--psm", "3",
+                      "-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0"};
     spec.timeoutMs = 5 * 60 * 1000;
     spec.environment.insert("OMP_THREAD_LIMIT", "2");
     const ProcessResult pr = ProcessRunner::run(spec, [cancel] { return cancel && cancel->load(); });

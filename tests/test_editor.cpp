@@ -189,3 +189,51 @@ TEST(Stability, ShutdownDuringProcessingStopsQuickly)
     for (int i = 0; i < 3; ++i)
         EXPECT_FALSE(QFile::exists(dir.filePath(QStringLiteral("out%1.webm").arg(i))));
 }
+
+#include "editor/pdf_native/PdfEditSession.h"
+#include "engines/ocr/TesseractEngine.h"
+
+TEST(Ocr, ScannedPdfGetsSearchableLayerWithoutChangingTheImage)
+{
+    QString why;
+    if (!TesseractEngine::isAvailable(&why))
+        GTEST_SKIP() << why.toStdString();
+    QTemporaryDir dir;
+    const QString pdf = dir.filePath("scan.pdf");
+    ASSERT_TRUE(makeScannedPdf(pdf, "Invoice number 4711\nTotal amount 120 PLN\nZapłacono gotówką"));
+    PdfEditSession s;
+    ASSERT_EQ(s.open(pdf), PdfEditSession::OpenStatus::Ok);
+    ASSERT_TRUE(s.analysis().isScanned);
+    const QImage before = s.original()->render(0, 1.0);
+
+    const QImage page = s.original()->render(0, 300.0 / 72.0, false).convertToFormat(QImage::Format_Grayscale8);
+    const QString langs = TesseractEngine::defaultLanguages();
+    EXPECT_TRUE(langs.contains("pol")) << langs.toStdString();
+    const OcrPageResult r = TesseractEngine::recognize(page, langs, dir.filePath("ocr"));
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    const QString text = r.text();
+    EXPECT_TRUE(text.contains("4711")) << text.toStdString();
+    EXPECT_TRUE(text.contains("Invoice"));
+    for (const OcrWord& w : r.words) {
+        EXPECT_GE(w.confidence, 0.0);
+        EXPECT_LE(w.confidence, 100.0);
+    }
+    // Apply as an invisible text layer.
+    const QTransform toPdf = s.original()->pageToDevice(0, r.imageSize).inverted();
+    EditOp op;
+    op.kind = EditOp::Kind::OcrLayer;
+    op.page = 0;
+    for (const OcrWord& w : r.words)
+        op.words.append({w.text, toPdf.mapRect(QRectF(w.box))});
+    ASSERT_TRUE(s.apply(op));
+    PdfEditSession::SaveOptions o;
+    o.backupDir = dir.filePath("b");
+    const auto res = s.save(o);
+    ASSERT_TRUE(res.ok) << res.error.toStdString();
+    auto saved = PdfDocument::openFile(pdf);
+    ASSERT_TRUE(saved);
+    EXPECT_TRUE(saved->pageText(0).contains("4711"));
+    EXPECT_TRUE(saved->analyze().hasTextLayer);
+    // Invisible text: the page still looks exactly like the scan.
+    EXPECT_LT(pixelDifference(before, saved->render(0, 1.0)), 0.0005);
+}

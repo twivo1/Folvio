@@ -4,7 +4,7 @@
 `QPdfWriter`, media with FFmpeg `lavfi`, DOCX/encrypted PDFs with Python's standard library + `pypdf`) and run
 real engines. Tests that need a missing engine are reported as *skipped*, never as passed.
 
-Last full run (2026-11-18, Windows 11, all engines present): **49 tests, 49 passed, 0 skipped**.
+Last full run (2026-11-18, Windows 11, all engines present): **50 tests, 50 passed, 0 skipped**.
 
 | Suite | Covers |
 |---|---|
@@ -18,6 +18,7 @@ Last full run (2026-11-18, Windows 11, all engines present): **49 tests, 49 pass
 | `Pdf.*` | Simple, multi-page, Polish text, tables + images, scanned (no text layer), corrupted/truncated, unusual fonts, layout |
 | `Convert.*` | PNG→JPG (alpha), name conflicts, long/Polish paths, images↔PDF, Markdown→HTML/PDF, HTML→DOCX→PDF, PDF→DOCX, CSV→XLSX→JSON, MP4→MP3, MP4→MKV (remux), →H.265, FLAC→MP3, video without audio, MP4→GIF, frames, cancel, AVIF, repeated import |
 | `Docx.HeadersAndFootersSurviveConversionToPdf`, `RichEditor.*` | DOCX header/footer, editor round trip DOCX→edit→DOCX/PDF, Markdown save-back |
+| `Ocr.ScannedPdfGetsSearchableLayerWithoutChangingTheImage` | Scanned PDF → Tesseract (pol+eng) with per-word confidence → invisible text layer → saved PDF searchable, page image unchanged |
 | `Stability.ShutdownDuringProcessingStopsQuickly`, `ProcessRunner.*` | Closing while converting, timeouts, process-tree kill, no shell interpretation of arguments |
 | `FormatDetector.*`, `PathUtils.*`, `SafeFileWriter.*`, `TextData.*`, `Planner.*`, `OutputValidator.*` | Units: magic bytes, sanitizing, CSV/JSON rules, route planning, missing dependencies, truncated outputs |
 
