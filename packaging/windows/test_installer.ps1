@@ -30,11 +30,13 @@ $exe = Join-Path $dir 'Folvio.exe'
 if (-not (Test-Path $exe)) { Fail "Folvio.exe not installed in $dir" }
 Note "PASS install into '$dir'"
 
-$shell = New-Object -ComObject WScript.Shell
+# Shell.Application reads the link as Unicode (WScript.Shell's TargetPath goes through the ANSI code page
+# and turns Polish letters into '?').
+$shell = New-Object -ComObject Shell.Application
 foreach ($lnk in @((Join-Path ([Environment]::GetFolderPath('Programs')) 'Folvio.lnk'),
                    (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Folvio.lnk'))) {
     if (-not (Test-Path $lnk)) { Fail "shortcut missing: $lnk" }
-    $target = $shell.CreateShortcut($lnk).TargetPath
+    $target = $shell.NameSpace((Split-Path $lnk)).ParseName((Split-Path -Leaf $lnk)).GetLink.Path
     if ($target -ne $exe) { Fail "shortcut $lnk points to $target" }
     Note "PASS shortcut $lnk -> $target"
 }
