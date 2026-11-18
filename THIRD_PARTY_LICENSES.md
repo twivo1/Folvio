@@ -1,39 +1,73 @@
 # Folvio — third-party components
 
-Folvio is a C++/Qt application. It bundles the components below and can use
-separately installed engines. This document is informational and is not legal advice.
+Folvio's own source code is licensed under the MIT licence (see `LICENSE`, © 2026 Bartosz Skrzypiec).
+The release packages also contain the third-party components below, each under its own licence.
+This document lists what is actually inside the packages; it is informational and not legal advice.
 
-## Bundled with Folvio
+## In every package
+
+| Component | Version | Licence | Linking | Use |
+|---|---|---|---|---|
+| Qt (Core, Gui, Widgets, Sql, Svg, Concurrent + plugins) | 6.10.0 | LGPL-3.0-only | Dynamic (replaceable `.dll` / `.so` files) | User interface, imaging, SQLite access |
+| PDFium (prebuilt by bblanchon/pdfium-binaries) | chromium/8165 | BSD-3-Clause; bundled code (FreeType, ICU, libjpeg-turbo, OpenJPEG, LCMS, zlib, abseil, …) under the licences in `licenses/pdfium/` | Dynamic | PDF rendering, analysis and native editing |
+| OpenCV (`core`, `imgproc`) | 4.10.0 | Apache-2.0 (includes zlib, zlib licence) | Static | Combine: perspective correction, page detection |
+| SQLite (inside the Qt SQL plugin) | — | Public domain | Dynamic (plugin) | Settings and history |
+| Tesseract `tessdata_fast` language data (`pol`, `eng`) | 4.1 | Apache-2.0 | Data files | OCR language models |
+
+**Qt and the LGPL.** Folvio uses Qt under the LGPL-3.0. Qt is linked dynamically and the Qt libraries can be
+replaced by the user. Folvio uses only unmodified Qt 6.10.0 from the Qt Project; its complete source code is
+available at <https://download.qt.io/official_releases/qt/6.10/6.10.0/>. On Linux the TIFF image plugin is
+rebuilt from that same `qtimageformats` source (unmodified) against the distribution's libtiff
+(`packaging/linux/Dockerfile`). Qt's own bundled third-party code (libpng, libjpeg, libwebp, FreeType,
+HarfBuzz, PCRE2, md4c, …) is documented at <https://doc.qt.io/qt-6/licenses-used-in-qt.html>.
+
+## Windows installer only
 
 | Component | Version | Licence | Use |
 |---|---|---|---|
-| Qt 6 (Core, Gui, Widgets, Sql, Svg, Concurrent, image format plugins) | 6.10 | LGPL-3.0 (dynamically linked; Qt libraries are replaceable DLLs) | User interface, imaging, SQLite access |
-| PDFium (binaries by bblanchon/pdfium-binaries) | chromium/8165 | BSD-3-Clause; bundled third-party code under licences listed in `licenses/pdfium/` (FreeType, ICU, libjpeg-turbo, OpenJPEG, LCMS, zlib, abseil, …) | PDF rendering, analysis and native editing |
-| OpenCV (modules `core`, `imgproc`, statically linked; built by `tools/build_opencv.ps1`) | 4.10.0 | Apache-2.0 (text in `licenses/opencv/LICENSE`); includes zlib (zlib licence, `licenses/opencv/zlib-LICENSE`) | Combine: perspective correction (`warpPerspective`), page detection (Canny, contours) |
-| SQLite (via Qt SQL plugin) | — | Public domain | Settings and history |
-| Tesseract `tessdata_fast` language data (`pol`, `eng`) | 4.1 | Apache-2.0 | OCR language models |
-| MinGW-w64 runtime (libstdc++, libgcc, winpthreads) | GCC 13.1 | GPL-3.0 with GCC Runtime Library Exception / MIT-style | C++ runtime |
+| MinGW-w64 runtime (libstdc++, libgcc, winpthreads) | GCC 13.1 | GPL-3.0 with the GCC Runtime Library Exception; winpthreads MIT/BSD | C++ runtime |
+| Inno Setup (the installer program inside `Folvio-Setup-*.exe`) | 6 | Inno Setup licence (free for any use, including commercial) | Installation and uninstallation |
 
-Qt source code is available from https://download.qt.io/ and the Qt Company. To
-comply with the LGPL, Folvio links Qt dynamically; users may replace the Qt DLLs.
+## Linux packages only (AppImage and .deb)
 
-## External engines (not bundled, detected at run time)
+| Component | Licence | Use |
+|---|---|---|
+| ICU 73 (shipped with Qt) | Unicode License v3 / ICU | Unicode support in Qt |
+| libxcb utility libraries (`xcb-cursor`, `xcb-icccm`, `xcb-image`, `xcb-keysyms`, `xcb-render-util`, …), libxkbcommon, libXau, libXdmcp, libwayland-cursor | MIT / X11 | X11 and Wayland integration of Qt |
+| Liberation fonts | 2.1.5 | SIL Open Font License 1.1 | Metric-compatible substitutes for Arial, Times New Roman, Courier New when editing PDFs |
+| Carlito, Caladea | — | SIL OFL 1.1 (Carlito), Apache-2.0 (Caladea) | Substitutes for Calibri and Cambria |
+| DejaVu fonts | 2.37 | Bitstream Vera licence / public domain changes | Fallback fonts |
+| AppImage type 2 runtime (AppImage only) | 20251108 | MIT; statically includes squashfuse (BSD-2-Clause) and libfuse (LGPL-2.1, source: <https://github.com/AppImage/type2-runtime/tree/20251108> and <https://github.com/libfuse/libfuse>) | Mounting the AppImage |
+
+The licence texts of the bundled libraries and fonts are installed under `share/doc/folvio/` (Linux) or the
+`licenses\` folder (Windows). Libraries that every Linux desktop provides (glibc, OpenGL/EGL, fontconfig,
+FreeType, GLib, D-Bus, systemd, libtiff, X11, Wayland, …) are **not** bundled; the system copies are used.
+
+## External engines (not bundled)
+
+These run as separate programs. Folvio does not redistribute them; they are installed from their publishers
+(Windows: through the Windows package manager `winget` when the user chooses *Settings → Install missing
+engines*; Linux: through the distribution's packages, which the `.deb` lists as *Recommends*).
 
 | Engine | Licence | Notes |
 |---|---|---|
-| LibreOffice | MPL-2.0 | Office document conversion; runs as a separate process with macros disabled |
-| FFmpeg | LGPL-2.1+ or GPL (depends on the build) | Audio/video, HEIC and AVIF; separate process |
-| Tesseract OCR | Apache-2.0 | OCR; separate process |
-| Microsoft Word | Proprietary (user's own licence) | Optional; PDF→DOCX reconstruction via COM automation |
+| FFmpeg | LGPL-2.1+ or GPL-2.0+ (depends on the build) | Audio/video conversion, HEIC and AVIF |
+| LibreOffice | MPL-2.0 | Office document conversion; runs with macros disabled in a separate profile |
+| Tesseract OCR | Apache-2.0 | OCR engine (the Polish and English data above are bundled) |
+| Microsoft Word (Windows, optional) | Proprietary, the user's own licence | Higher-quality PDF→DOCX reconstruction through COM automation |
 
-Because these engines run as separate programs and are not distributed with
-Folvio, their licences do not apply to Folvio's own code. Commercial
-redistribution of Folvio *together with* any of these engines must follow the
-respective licences (e.g. GPL FFmpeg builds require GPL-compatible distribution;
-use an LGPL build when bundling).
+Bundling FFmpeg was considered and rejected for this release: the available Windows builds contain a dozen
+LGPL/GPL libraries whose exact sources would all have to be shipped with every release.
+
+## Build and packaging tools (not distributed)
+
+CMake, Ninja, GCC/MinGW-w64, GoogleTest (BSD-3-Clause, tests only), aqtinstall (MIT), linuxdeploy and
+linuxdeploy-plugin-qt (MIT), appimagetool (MIT). All downloads in the build scripts are pinned to a version
+and verified with SHA-256.
 
 ## Considered and not used
 
-* **MuPDF / PyMuPDF** — AGPL-3.0 or commercial licence; would force AGPL or a paid licence.
+* **MuPDF / PyMuPDF** — AGPL-3.0 or commercial licence.
 * **ONLYOFFICE** — AGPL-3.0; requires a document server.
-* **Qt WebEngine** — unavailable for the MinGW toolchain.
+* **Qt WebEngine** — unavailable for the MinGW toolchain; not needed.
+* **Qt PDF** — not used (Folvio uses PDFium directly); excluded from the packages.

@@ -1,10 +1,31 @@
 # Testing
 
-`build/release/tests/folvio_tests.exe` (GoogleTest). Tests generate their own fixtures at run time (PDFs with
+`folvio_tests` (GoogleTest) — `build/release/tests/folvio_tests.exe` on Windows, `build/linux-release/tests/folvio_tests`
+in the Linux build container. Tests generate their own fixtures at run time (PDFs with
 `QPdfWriter`, media with FFmpeg `lavfi`, DOCX/encrypted PDFs with Python's standard library + `pypdf`) and run
 real engines. Tests that need a missing engine are reported as *skipped*, never as passed.
 
-Last full run (2026-11-18, Windows 11, all engines present): **78 tests, 78 passed, 0 skipped** (60 existing + 18 Combine).
+Last full runs (2026-11-18, all engines present):
+
+* **Windows 11** (MinGW, Qt 6.10.0): 80 tests, 80 passed, 0 skipped.
+* **Linux** (Ubuntu 24.04 container, Qt 6.10.0, real X server through Xvfb, unprivileged user): 80 tests, 80 passed,
+  0 skipped.
+
+Platform-specific expectations are explicit in the tests: process-tree termination (`Job Objects` on Windows,
+process groups on Linux), font substitution (Windows fonts vs. Liberation/Carlito/DejaVu), read-only files
+(`chmod a-w` is respected even for root).
+
+## Release packages
+
+* `Folvio --selftest [--selftest-require ffmpeg,soffice,tesseract] [--selftest-report file]` runs real operations of the
+  installed program in an isolated data folder: Combine 3 PNG → PDF with Polish text, Auto Change edit + save +
+  verification, PNG → JPG, Markdown → PDF and — with the engines — MP4 → MP3, HTML → DOCX → PDF → DOCX and OCR.
+* `packaging/build_release.ps1` runs the self-test on the deployed Windows folder with a minimal `PATH`.
+* `packaging/windows/test_installer.ps1` (CI only) installs the setup into a folder with Polish characters, checks the
+  Start menu and desktop shortcuts, self-tests the installed program, uninstalls it and checks that user data is kept.
+* `packaging/linux/clean_test.sh` runs in clean `ubuntu:24.04`, `ubuntu:26.04` and `fedora:43` containers: AppImage and
+  `.deb`, with and without engines, self-test, window rendering, `apt remove` keeping user data.
+
 
 | Suite | Covers |
 |---|---|
@@ -28,6 +49,8 @@ Last full run (2026-11-18, Windows 11, all engines present): **78 tests, 78 pass
 | `CombineExport.*` | 1 image → 1 page, 10 images → 10 pages in order (text and colour block checked per page), A4 portrait/landscape per page, forced orientation, original size, refuses to overwrite; straightened page + vector highlighter/arrow + Polish text (PDFium object types, rendering, transparency, **pypdf** text extraction); unedited JPEG embedded byte-for-byte; cancelled export leaves no file |
 | `CombineSessionTest.*` | Autosave → restore, `.folvio` project with embedded clipboard image, missing source reported |
 | `CombineGui.ImportReorderStraightenAnnotateExportReopen` | End to end through the GUI: import 3 photos, paste a screenshot with Ctrl+V, reorder with Ctrl+Up/Down, drag the four perspective handles with the mouse, Straighten, pen stroke, text box with Polish characters (Ctrl+V inside the text box pastes text, not a page), Ctrl+Z/Ctrl+Y, export, reopen with PDFium: 4 pages, order, straightened page, text |
+| `AutoChange.SubsetFontNamedLikeTheSystemFontStaysSeparate` | Regression found on Linux: a PDF embedding a font subset under the system font's exact PostScript name; edits needing that system font must not merge the two `/Font` resources (verified to fail without the fix on Windows and Linux) |
+| `CombineGui.ActionsAreDisabledWhenTheyCannotRun` | *Next: Edit*, *Sort by name*, *Remove* enabled only when they can act |
 | `FormatDetector.*`, `PathUtils.*`, `SafeFileWriter.*`, `TextData.*`, `Planner.*`, `OutputValidator.*` | Units: magic bytes, sanitizing, CSV/JSON rules, route planning, missing dependencies, truncated outputs |
 
 The release script (`packaging/build_release.ps1`) runs the suite and additionally smoke-tests the deployed

@@ -122,6 +122,8 @@ else()
     endforeach()
     install(FILES "${CMAKE_SOURCE_DIR}/LICENSE" "${CMAKE_SOURCE_DIR}/THIRD_PARTY_LICENSES.md"
             DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/folvio")
+    install(FILES "${CMAKE_SOURCE_DIR}/packaging/licenses/LGPL-3.0.txt" "${CMAKE_SOURCE_DIR}/packaging/licenses/GPL-3.0.txt"
+            DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/folvio/licenses/qt")
     install(FILES "${PDFIUM_ROOT}/LICENSE" DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/folvio/licenses/pdfium")
     install(DIRECTORY "${PDFIUM_ROOT}/licenses/" DESTINATION "${CMAKE_INSTALL_DATADIR}/doc/folvio/licenses/pdfium")
     install(FILES "${CMAKE_SOURCE_DIR}/third_party/opencv/share/licenses/opencv4/LICENSE"

@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class QTreeWidget;
+class QPushButton;
 class QTableWidget;
 class QSpinBox;
 class QCheckBox;
@@ -30,12 +31,14 @@ class SettingsPage : public QWidget {
     Q_OBJECT
 public:
     explicit SettingsPage(QWidget* parent = nullptr);
+    void installEngines();
     void refreshEngines();
 
 Q_SIGNALS:
     void themeChanged();
 
 private:
+    QPushButton* m_installEngines = nullptr;
     QTableWidget* m_engines = nullptr;
     QButtonGroup* m_theme = nullptr;
 };

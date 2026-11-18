@@ -1,0 +1,123 @@
+name: Release
+
+# Push a tag like v0.10.0 (or v0.10.0-beta.1 for a pre-release). Every artifact is built, tested and
+# verified on clean systems before anything is published.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re)build, e.g. v0.10.0'
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    name: Verify tag and repository
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - name: Tag matches CMakeLists.txt, installer and metainfo versions; repository hygiene
+        run: RELEASE_TAG="$TAG" python3 tools/check_repo.py
+      - name: Release notes exist
+        run: test -s "docs/release-notes/${TAG}.md"
+
+  linux:
+    name: Linux packages
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - name: Build environment image
+        run: docker build -t folvio-build packaging/linux
+      - name: Build, all tests, AppImage and .deb
+        run: docker run --rm -v "$PWD:/src" -w /src folvio-build packaging/linux/build_linux.sh
+      - name: Clean systems - AppImage and .deb with engines (Ubuntu 24.04, 26.04, Fedora 43)
+        run: |
+          set -e
+          for combo in "ubuntu:24.04 appimage yes" "ubuntu:24.04 deb yes" "ubuntu:24.04 appimage no" \
+                       "ubuntu:26.04 appimage yes" "ubuntu:26.04 deb yes" "fedora:43 appimage yes"; do
+            set -- $combo
+            echo "::group::$combo"
+            docker run --rm -v "$PWD/dist/linux:/out" -v "$PWD/packaging/linux:/scripts:ro" "$1" bash /scripts/clean_test.sh "$2" "$3" \
+              | tee -a dist/linux/clean-systems.log
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux
+          path: |
+            dist/linux/Folvio-*.AppImage
+            dist/linux/Folvio-*.deb
+            dist/linux/linux-tests.log
+            dist/linux/clean-systems.log
+
+  windows:
+    name: Windows installer
+    needs: verify
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - name: Toolchain (Qt 6.10.0, MinGW 13.1, CMake, Ninja, Inno Setup)
+        shell: pwsh
+        run: packaging/windows/install_toolchain.ps1 -Root C:\Qt
+      - name: Build, tests, deployment, self-test, installer
+        shell: pwsh
+        run: packaging/build_release.ps1 -QtDir C:\Qt\6.10.0\mingw_64 -QtTools C:\Qt\Tools
+      - name: Installer on this machine (no Qt or MinGW in PATH) - install, shortcuts, self-test, uninstall
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem dist\Folvio-Setup-*-Windows-x64.exe | Select-Object -First 1
+          packaging\windows\test_installer.ps1 -Setup $setup.FullName -Report dist\installer-test-windows.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows
+          path: |
+            dist/Folvio-Setup-*-Windows-x64.exe
+            dist/selftest-windows.txt
+            dist/installer-test-windows.txt
+
+  publish:
+    name: Publish GitHub release
+    needs: [linux, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: artifacts
+      - name: Check artifacts and checksums
+        run: |
+          set -e
+          mkdir release
+          cp artifacts/windows/Folvio-Setup-*-Windows-x64.exe artifacts/linux/Folvio-*.AppImage artifacts/linux/Folvio-*.deb release/
+          cat artifacts/windows/installer-test-windows.txt artifacts/linux/clean-systems.log | grep -E "RESULT|selftest exit"
+          ! grep -q "FAIL" artifacts/windows/installer-test-windows.txt
+          test "$(ls release | wc -l)" -eq 3
+          (cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          flags=""
+          case "$TAG" in *-*) flags="--prerelease" ;; esac
+          gh release create "$TAG" release/* --title "Folvio ${TAG#v}" --notes-file "docs/release-notes/${TAG}.md" $flags --verify-tag

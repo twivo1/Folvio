@@ -100,6 +100,19 @@ LibreOffice) → DOCX → HTML. `PagedDocumentView` hosts a `QTextEdit` in a `QG
 `QTextDocumentWriter` and converts it back with LibreOffice, or prints PDF from the same paginated layout.
 Every save goes through `SafeFileWriter` with format validation, and the user is told what may not survive.
 
+## Platforms
+
+The code is shared; platform differences are confined to a few adapters:
+
+| Concern | Windows | Linux |
+|---|---|---|
+| External processes (`ProcessRunner`) | Job Object (memory cap, whole tree killed on cancel), hidden console | Own process group (whole tree killed), `PR_SET_PDEATHSIG`; AppImage variables removed from the child environment |
+| Atomic save (`SafeFileWriter`) | `ReplaceFileW` (keeps ACLs/attributes) | permissions copied, `fsync`, `rename`, directory `fsync`; `a-w` respected |
+| Engine discovery (`DependencyManager`) | bundled folder, Program Files, registry, winget links, `PATH` | bundled folder, `PATH`, `/usr/lib*/libreoffice`, `/opt/libreoffice*`, `/snap/bin` |
+| Fonts (`FontMatcher`) | Windows font folders | bundled fonts first, then `~/.local/share/fonts`, `/usr/share/fonts`; Windows families mapped to metric-compatible substitutes |
+| Resources (`PathUtils::resourceDir`) | `<exe>\engines` | `<prefix>/share/folvio/engines` (AppImage, .deb) or `<exe>/engines` (build tree) |
+| Engine installation (`EngineInstaller`) | `winget` with consent | the distribution's package manager command |
+
 ## Privacy and robustness
 
 * Database stores paths, formats, statuses and settings – never document content.

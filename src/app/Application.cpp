@@ -4,12 +4,17 @@
 #include "core/deps/DependencyManager.h"
 #include "core/files/PathUtils.h"
 #include "core/persistence/Database.h"
+#include "app/SelfTest.h"
 #include "combine/CombineWorkspace.h"
 #include "ui/MainWindow.h"
 #include "ui/themes/Theme.h"
 #include "ui/widgets/Icons.h"
 
 #include <QApplication>
+
+#include <cstring>
+#include <memory>
+#include <QTemporaryDir>
 #include <QCommandLineParser>
 #include <QDateTime>
 #include <QFile>
@@ -56,6 +61,13 @@ void openLog()
 
 int runApplication(int argc, char* argv[])
 {
+    // The self-test must never touch the user's settings, history or recovery files.
+    std::unique_ptr<QTemporaryDir> selfTestData;
+    for (int i = 1; i < argc; ++i)
+        if (std::strcmp(argv[i], "--selftest") == 0 && qEnvironmentVariableIsEmpty("FOLVIO_DATA_DIR")) {
+            selfTestData = std::make_unique<QTemporaryDir>();
+            qputenv("FOLVIO_DATA_DIR", selfTestData->path().toUtf8());
+        }
     QApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
     QApplication app(argc, argv);
     initFolvioResources();
@@ -79,7 +91,14 @@ int runApplication(int argc, char* argv[])
     QCommandLineOption combineToolOpt(QStringLiteral("combine-tool"), QStringLiteral("Open Combine Edit with a tool index (diagnostics)."), QStringLiteral("tool"));
     QCommandLineOption combineDemoOpt(QStringLiteral("combine-demo"), QStringLiteral("Straighten and annotate the first Combine page (diagnostics)."));
     QCommandLineOption combineStepOpt(QStringLiteral("combine-step"), QStringLiteral("Combine step 0..2 (diagnostics)."), QStringLiteral("step"));
-    for (const auto& o : {shotOpt, pageOpt, themeOpt, delayOpt, editOpt, combineOpt, combineToolOpt, combineDemoOpt, combineStepOpt})
+    QCommandLineOption selfTestOpt(QStringLiteral("selftest"), QStringLiteral("Run the built-in self-test of the installed application and exit."));
+    QCommandLineOption selfTestRequireOpt(QStringLiteral("selftest-require"),
+                                          QStringLiteral("Engines that must be present (comma separated: ffmpeg,soffice,tesseract)."),
+                                          QStringLiteral("engines"));
+    QCommandLineOption selfTestReportOpt(QStringLiteral("selftest-report"), QStringLiteral("Write the self-test report to a file."),
+                                         QStringLiteral("file"));
+    for (const auto& o : {shotOpt, pageOpt, themeOpt, delayOpt, editOpt, combineOpt, combineToolOpt, combineDemoOpt, combineStepOpt,
+                          selfTestOpt, selfTestRequireOpt, selfTestReportOpt})
         parser.addOption(o);
     parser.process(app);
 
@@ -101,6 +120,8 @@ int runApplication(int argc, char* argv[])
     });
     ConversionRegistry::registerBuiltins();
     PathUtils::cleanupStaleTemp(12);
+    if (parser.isSet(selfTestOpt))
+        return runSelfTest(parser.value(selfTestRequireOpt).split(',', Qt::SkipEmptyParts), parser.value(selfTestReportOpt));
 
     MainWindow window;
     window.show();

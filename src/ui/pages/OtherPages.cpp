@@ -1,6 +1,7 @@
 #include "ui/pages/OtherPages.h"
 
 #include "core/deps/DependencyManager.h"
+#include "core/deps/EngineInstaller.h"
 #include "core/files/PathUtils.h"
 #include "core/persistence/Database.h"
 #include "editor/rich/RichDocumentIO.h"
@@ -14,6 +15,13 @@
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
+#include <QApplication>
+#include <QHBoxLayout>
+#include <QPointer>
+#include <QClipboard>
+#include <QtConcurrent>
+#include <QFutureWatcher>
+#include <QProgressDialog>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -270,7 +278,15 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent)
         m_engines->setMinimumHeight(230);
         l->addWidget(m_engines);
         auto* refresh = new QPushButton(Icons::get("retry"), tr("Detect again"), content);
-        l->addWidget(refresh, 0, Qt::AlignLeft);
+        m_installEngines = new QPushButton(Icons::get("plus"), tr("Install missing engines…"), content);
+        m_installEngines->setToolTip(tr("FFmpeg (audio/video), LibreOffice (office documents) and Tesseract (OCR) are "
+                                        "separate free programs. Folvio can install them for you."));
+        auto* engineButtons = new QHBoxLayout;
+        engineButtons->addWidget(refresh);
+        engineButtons->addWidget(m_installEngines);
+        engineButtons->addStretch();
+        l->addLayout(engineButtons);
+        connect(m_installEngines, &QPushButton::clicked, this, &SettingsPage::installEngines);
         auto* ocr = new QLabel(content);
         ocr->setWordWrap(true);
         ocr->setProperty("muted", true);
@@ -285,7 +301,12 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent)
             const QString id = m_engines->item(row, 0)->data(Qt::UserRole).toString();
             if (id == "pdfium" || id == "word")
                 return;
-            const QString exe = QFileDialog::getOpenFileName(this, tr("Choose executable"), QString(), tr("Programs (*.exe *.com)"));
+#ifdef Q_OS_WIN
+            const QString filter = tr("Programs (*.exe *.com)");
+#else
+            const QString filter = tr("All files (*)");
+#endif
+            const QString exe = QFileDialog::getOpenFileName(this, tr("Choose executable"), QString(), filter);
             if (exe.isEmpty())
                 return;
             DependencyManager::instance().setOverride(id, exe);
@@ -325,7 +346,7 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent)
         auto* lic = new QPushButton(tr("Open licences"), content);
         l->addWidget(lic, 0, Qt::AlignLeft);
         connect(lic, &QPushButton::clicked, this, [] {
-            QDesktopServices::openUrl(QUrl::fromLocalFile(QCoreApplication::applicationDirPath() + "/THIRD_PARTY_LICENSES.md"));
+            QDesktopServices::openUrl(QUrl::fromLocalFile(PathUtils::documentationDir() + "/THIRD_PARTY_LICENSES.md"));
         });
     }
     root->addStretch();
@@ -352,6 +373,102 @@ void SettingsPage::refreshEngines()
     }
     m_engines->resizeColumnsToContents();
     m_engines->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    if (m_installEngines)
+        m_installEngines->setEnabled(!EngineInstaller::missingEngines().isEmpty());
+}
+
+void SettingsPage::installEngines()
+{
+    const QStringList missing = EngineInstaller::missingEngines();
+    if (missing.isEmpty())
+        return;
+    QStringList names;
+    for (const QString& id : missing)
+        names << DependencyManager::instance().tool(id).displayName;
+#ifdef Q_OS_WIN
+    if (!EngineInstaller::wingetAvailable()) {
+        QMessageBox box(QMessageBox::Information, tr("Install engines"),
+                        tr("The Windows package manager (winget) is not available. Download the engines from their "
+                           "official pages, install them, then choose \"Detect again\":\n\n%1").arg(names.join("\n")),
+                        QMessageBox::Ok, this);
+        auto* open = box.addButton(tr("Open download pages"), QMessageBox::ActionRole);
+        box.exec();
+        if (box.clickedButton() == open)
+            for (const QString& id : missing)
+                QDesktopServices::openUrl(QUrl(EngineInstaller::downloadPage(id)));
+        return;
+    }
+    const auto answer = QMessageBox::question(
+        this, tr("Install engines"),
+        tr("Folvio will install these free programs with the Windows package manager (winget). They are downloaded "
+           "from their publishers over the internet (FFmpeg about 100 MB, LibreOffice about 350 MB, Tesseract about "
+           "60 MB). Windows may ask for administrator permission.\n\n%1\n\nContinue?").arg(names.join("\n")));
+    if (answer != QMessageBox::Yes)
+        return;
+    m_installEngines->setEnabled(false);
+    auto* progress = new QProgressDialog(tr("Installing engines…"), tr("Cancel"), 0, int(missing.size()), this);
+    progress->setWindowModality(Qt::WindowModal);
+    progress->setMinimumDuration(0);
+    progress->setValue(0);
+    auto cancel = std::make_shared<std::atomic_bool>(false);
+    connect(progress, &QProgressDialog::canceled, this, [cancel] { cancel->store(true); });
+    QPointer<SettingsPage> self(this);
+    auto* watcher = new QFutureWatcher<QStringList>(this);
+    connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, progress, names] {
+        const QStringList failures = watcher->result();
+        watcher->deleteLater();
+        progress->close();
+        progress->deleteLater();
+        DependencyManager::instance().refresh();
+        refreshEngines();
+        if (failures.isEmpty())
+            QMessageBox::information(this, tr("Install engines"), tr("Installed: %1").arg(names.join(", ")));
+        else
+            QMessageBox::warning(this, tr("Install engines"),
+                                 tr("Some engines were not installed:\n\n%1").arg(failures.join("\n\n")));
+    });
+    watcher->setFuture(QtConcurrent::run([missing, cancel, self, progress] {
+        QStringList failures;
+        int done = 0;
+        for (const QString& id : missing) {
+            if (cancel->load())
+                break;
+            const QString name = DependencyManager::instance().tool(id).displayName;
+            QMetaObject::invokeMethod(qApp, [self, progress, name, done] {
+                if (self && progress) {
+                    progress->setLabelText(QObject::tr("Installing %1…").arg(name));
+                    progress->setValue(done);
+                }
+            }, Qt::QueuedConnection);
+            QString log;
+            if (!EngineInstaller::installWithWinget(id, &log, cancel.get()))
+                failures << name + ": " + log.right(400);
+            ++done;
+        }
+        return failures;
+    }));
+#else
+    const QString command = EngineInstaller::linuxInstallCommand(missing);
+    QMessageBox box(this);
+    box.setIcon(QMessageBox::Information);
+    box.setWindowTitle(tr("Install engines"));
+    if (command.isEmpty()) {
+        box.setText(tr("Install these programs with your distribution's package manager, then choose \"Detect again\":"
+                       "\n\n%1").arg(names.join("\n")));
+    } else {
+        box.setText(tr("Install the missing engines with your package manager (in a terminal), then choose "
+                       "\"Detect again\":"));
+        box.setInformativeText(command);
+        box.setTextInteractionFlags(Qt::TextSelectableByMouse);
+        auto* copy = box.addButton(tr("Copy command"), QMessageBox::ActionRole);
+        box.addButton(QMessageBox::Close);
+        box.exec();
+        if (box.clickedButton() == copy)
+            QApplication::clipboard()->setText(command);
+        return;
+    }
+    box.exec();
+#endif
 }
 
 } // namespace folvio

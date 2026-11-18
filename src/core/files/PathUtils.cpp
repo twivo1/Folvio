@@ -38,6 +38,15 @@ QString PathUtils::resourceDir()
     return local;
 }
 
+QString PathUtils::documentationDir()
+{
+    const QString exeDir = QCoreApplication::instance() ? QCoreApplication::applicationDirPath() : QDir::currentPath();
+    const QString shared = QDir::cleanPath(exeDir + QStringLiteral("/../share/doc/folvio"));
+    if (QFileInfo::exists(shared + QStringLiteral("/THIRD_PARTY_LICENSES.md")))
+        return shared;
+    return exeDir;
+}
+
 QString PathUtils::backupDir() { return ensureDir(appDataDir() + QStringLiteral("/backups")); }
 QString PathUtils::tempRoot() { return ensureDir(appDataDir() + QStringLiteral("/temp")); }
 QString PathUtils::recoveryDir() { return ensureDir(appDataDir() + QStringLiteral("/recovery")); }

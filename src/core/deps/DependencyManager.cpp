@@ -191,8 +191,13 @@ ToolInfo DependencyManager::detect(const QString& id)
         t.path = firstExisting(cands);
         if (!t.path.isEmpty()) {
             // Distribution wrappers (/usr/bin/soffice) link into the install; the version is in versionrc.
+            // Wrappers may also be shell scripts (Fedora), so fall back to the standard install folders.
             const QString real = QFileInfo(t.path).canonicalFilePath();
-            QSettings rc(QFileInfo(real).absolutePath() + "/versionrc", QSettings::IniFormat);
+            QString rcPath = QFileInfo(real).absolutePath() + "/versionrc";
+            for (const QString& dir : {QStringLiteral("/usr/lib/libreoffice/program"), QStringLiteral("/usr/lib64/libreoffice/program")})
+                if (!QFileInfo::exists(rcPath))
+                    rcPath = dir + "/versionrc";
+            QSettings rc(rcPath, QSettings::IniFormat);
             t.version = rc.value(QStringLiteral("Version/ProductKey")).toString().section(' ', -1); // "LibreOffice 24.2"
             if (t.version.isEmpty())
                 t.version = rc.value(QStringLiteral("Version/ProductMajor")).toString();

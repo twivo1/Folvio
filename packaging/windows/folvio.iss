@@ -2,7 +2,7 @@
 ; Built by packaging\build_release.ps1 - expects the deployed app in dist\Folvio.
 
 #ifndef AppVersion
-  #define AppVersion "0.9.0"
+  #define AppVersion "0.10.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\..\dist\Folvio"
@@ -16,7 +16,11 @@ AppId={{A36CF9A8-7919-4117-9EE2-39806CBE94B2}
 AppName=Folvio
 AppVersion={#AppVersion}
 AppVerName=Folvio {#AppVersion}
-AppPublisher=Folvio
+AppPublisher=Bartosz Skrzypiec
+AppPublisherURL=https://github.com/twivo1/Folvio
+AppSupportURL=https://github.com/twivo1/Folvio/issues
+AppUpdatesURL=https://github.com/twivo1/Folvio/releases
+AppCopyright=Copyright (c) 2026 Bartosz Skrzypiec
 VersionInfoVersion={#AppVersion}
 VersionInfoProductName=Folvio
 ; Per-user install by default (no administrator rights needed); admins may choose all users.
@@ -29,7 +33,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 OutputDir={#OutputDir}
-OutputBaseFilename=Folvio-Setup-{#AppVersion}-x64
+OutputBaseFilename=Folvio-Setup-{#AppVersion}-Windows-x64
 SetupIconFile=..\..\assets\branding\folvio.ico
 UninstallDisplayIcon={app}\Folvio.exe
 UninstallDisplayName=Folvio
@@ -40,7 +44,7 @@ Compression=lzma2/max
 SolidCompression=yes
 CloseApplications=yes
 RestartApplications=no
-LicenseFile=..\..\THIRD_PARTY_LICENSES.md
+LicenseFile=..\..\LICENSE
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
