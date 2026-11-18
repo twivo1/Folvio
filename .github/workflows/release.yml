@@ -90,7 +90,7 @@ jobs:
         shell: pwsh
         run: |
           $setup = Get-ChildItem dist\Folvio-Setup-*-Windows-x64.exe | Select-Object -First 1
-          packaging\windows\test_installer.ps1 -Setup $setup.FullName -Require ffmpeg,soffice,tesseract -Report dist\installer-test-windows.txt
+          packaging\windows\test_installer.ps1 -Setup $setup.FullName -Require 'ffmpeg,soffice,tesseract' -Report dist\installer-test-windows.txt
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: windows
