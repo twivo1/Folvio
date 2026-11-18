@@ -253,8 +253,11 @@ ToolInfo DependencyManager::detect(const QString& id)
 QStringList DependencyManager::tesseractLanguages()
 {
     QStringList langs;
-    const QStringList dirs = {PathUtils::resourceDir() + "/tessdata", PathUtils::appDataDir() + "/tessdata",
-                              QFileInfo(path("tesseract")).absolutePath() + "/tessdata"};
+    // FOLVIO_TESSDATA_DIR (e.g. a folder with more languages) takes precedence over the bundled data.
+    QStringList dirs = {PathUtils::resourceDir() + "/tessdata", PathUtils::appDataDir() + "/tessdata",
+                        QFileInfo(path("tesseract")).absolutePath() + "/tessdata"};
+    if (const QString custom = qEnvironmentVariable("FOLVIO_TESSDATA_DIR"); !custom.isEmpty())
+        dirs.prepend(custom);
     for (const QString& d : dirs)
         for (const QFileInfo& fi : QDir(d).entryInfoList({"*.traineddata"}, QDir::Files))
             if (!langs.contains(fi.completeBaseName()))
@@ -264,8 +267,11 @@ QStringList DependencyManager::tesseractLanguages()
 
 QString DependencyManager::tessdataDir(const QStringList& languages)
 {
-    const QStringList dirs = {PathUtils::resourceDir() + "/tessdata", PathUtils::appDataDir() + "/tessdata",
-                              QFileInfo(path("tesseract")).absolutePath() + "/tessdata"};
+    // FOLVIO_TESSDATA_DIR (e.g. a folder with more languages) takes precedence over the bundled data.
+    QStringList dirs = {PathUtils::resourceDir() + "/tessdata", PathUtils::appDataDir() + "/tessdata",
+                        QFileInfo(path("tesseract")).absolutePath() + "/tessdata"};
+    if (const QString custom = qEnvironmentVariable("FOLVIO_TESSDATA_DIR"); !custom.isEmpty())
+        dirs.prepend(custom);
     for (const QString& d : dirs) {
         bool all = QDir(d).exists();
         for (const QString& l : languages)

@@ -150,6 +150,8 @@ ProcessResult ProcessRunner::run(const ProcessSpec& spec, const std::function<bo
 #ifdef Q_OS_WIN
     job.assign(p.processId());
 #endif
+    if (!spec.stdinData.isEmpty())
+        p.write(spec.stdinData); // written asynchronously while the loop below waits
     p.closeWriteChannel();
 
     QElapsedTimer timer;

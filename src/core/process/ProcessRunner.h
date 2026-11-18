@@ -13,6 +13,7 @@ struct ProcessSpec {
     QString program;            // absolute path to the executable
     QStringList arguments;      // passed as an argv array - never concatenated into a shell string
     QString workingDirectory;
+    QByteArray stdinData;       // sent to the program's standard input, then the input is closed
     int timeoutMs = 10 * 60 * 1000;
     qint64 memoryLimitBytes = 4LL * 1024 * 1024 * 1024; // per process tree (Windows Job Object)
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();

@@ -3,6 +3,7 @@
 #include "core/deps/DependencyManager.h"
 #include "core/process/ProcessRunner.h"
 
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QUuid>
@@ -97,31 +98,35 @@ OcrPageResult TesseractEngine::recognize(const QImage& image, const QString& lan
         r.error = QObject::tr("Language data for %1 is missing.").arg(languages);
         return r;
     }
-    QDir().mkpath(workDir);
-    const QString base = workDir + "/ocr-" + QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const QString png = base + ".png";
-    if (!image.save(png, "PNG")) {
-        r.error = QObject::tr("Could not prepare the page image.");
-        return r;
+    Q_UNUSED(workDir)
+    QByteArray png;
+    {
+        QBuffer buffer(&png);
+        if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG")) {
+            r.error = QObject::tr("Could not prepare the page image.");
+            return r;
+        }
     }
     ProcessSpec spec;
     spec.program = DependencyManager::instance().path("tesseract");
-    // Request TSV via a variable rather than the "tsv" config file: the bundled
-    // tessdata folder contains only language models, no configs/ directory.
-    spec.arguments = {png, base, "--tessdata-dir", tessdata, "-l", languages, "--psm", "3",
+    // No file paths on the command line: Windows builds of Tesseract read their arguments in the
+    // ANSI code page, so a folder like "Zażółć" or a user name outside it would break OCR.
+    // The image goes through stdin, the TSV comes back on stdout, and the language data are found
+    // relative to the working directory (set through the Unicode process API).
+    // TSV is requested via a variable rather than the "tsv" config file: the bundled tessdata folder
+    // contains only language models, no configs/ directory.
+    spec.workingDirectory = tessdata;
+    spec.stdinData = png;
+    spec.arguments = {"stdin", "stdout", "--tessdata-dir", ".", "-l", languages, "--psm", "3",
                       "-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0"};
     spec.timeoutMs = 5 * 60 * 1000;
     spec.environment.insert("OMP_THREAD_LIMIT", "2");
     const ProcessResult pr = ProcessRunner::run(spec, [cancel] { return cancel && cancel->load(); });
-    QFile::remove(png);
-    QFile out(base + ".tsv");
-    if (!pr.succeeded() || !out.open(QIODevice::ReadOnly)) {
+    if (!pr.succeeded()) {
         r.error = pr.cancelled ? QObject::tr("Cancelled.") : pr.describe();
         return r;
     }
-    r.words = parseTsv(out.readAll());
-    out.close();
-    QFile::remove(base + ".tsv");
+    r.words = parseTsv(pr.stdOut);
     double sum = 0;
     for (const OcrWord& w : r.words)
         sum += w.confidence;

@@ -16,6 +16,8 @@
 #include <QTextDocument>
 #include <QThread>
 
+#include <QPainter>
+#include <QDir>
 #include <gtest/gtest.h>
 
 using namespace folvio;
@@ -192,6 +194,39 @@ TEST(Stability, ShutdownDuringProcessingStopsQuickly)
 
 #include "editor/pdf_native/PdfEditSession.h"
 #include "engines/ocr/TesseractEngine.h"
+
+// Regression (found by the installer test on an English Windows): Tesseract for Windows reads its
+// arguments in the ANSI code page, so OCR failed when the language data or the work folder were in a
+// path with characters outside it (installation folder "Zażółć", user names like "Łukasz").
+// Folvio now passes no paths at all (stdin/stdout, relative tessdata). "Ψ 日本" is outside every
+// European code page, so this fails without the fix on any Windows.
+TEST(Ocr, WorksWhenTheLanguageDataPathHasNonAnsiCharacters)
+{
+    QString why;
+    if (!TesseractEngine::isAvailable(&why))
+        GTEST_SKIP() << why.toStdString();
+    const QString source = DependencyManager::instance().tessdataDir({"eng"});
+    ASSERT_FALSE(source.isEmpty());
+    QTemporaryDir dir;
+    const QString unicodeDir = dir.filePath(QString::fromUtf8("OCR Ψ 日本 Zażółć"));
+    ASSERT_TRUE(QDir().mkpath(unicodeDir));
+    ASSERT_TRUE(QFile::copy(source + "/eng.traineddata", unicodeDir + "/eng.traineddata"));
+    qputenv("FOLVIO_TESSDATA_DIR", unicodeDir.toUtf8());
+    QImage img(1000, 300, QImage::Format_Grayscale8);
+    img.fill(255);
+    {
+        QPainter p(&img);
+        QFont f("Arial");
+        f.setPixelSize(48);
+        p.setFont(f);
+        p.drawText(60, 160, "Invoice number 4711");
+    }
+    const OcrPageResult r = TesseractEngine::recognize(img, "eng", dir.filePath(QString::fromUtf8("work Ψ")));
+    qunsetenv("FOLVIO_TESSDATA_DIR");
+    ASSERT_EQ(DependencyManager::instance().tessdataDir({"eng"}), source);
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    EXPECT_TRUE(r.text().contains("4711")) << r.text().toStdString();
+}
 
 TEST(Ocr, ScannedPdfGetsSearchableLayerWithoutChangingTheImage)
 {

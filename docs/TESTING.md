@@ -7,9 +7,9 @@ real engines. Tests that need a missing engine are reported as *skipped*, never 
 
 Last full runs (2026-11-18, all engines present):
 
-* **Windows 11** (MinGW, Qt 6.10.0): 80 tests, 80 passed, 0 skipped.
-* **Linux** (Ubuntu 24.04 container, Qt 6.10.0, real X server through Xvfb, unprivileged user): 80 tests, 80 passed,
-  0 skipped.
+* **Windows 11** (MinGW, Qt 6.10.0): 81 tests, 81 passed, 0 skipped.
+* **Linux** (Ubuntu 24.04 container, Qt 6.10.0, real X server through Xvfb, unprivileged user): 81 tests; the release
+  workflow runs all of them on both systems with FFmpeg, LibreOffice and Tesseract installed.
 
 Platform-specific expectations are explicit in the tests: process-tree termination (`Job Objects` on Windows,
 process groups on Linux), font substitution (Windows fonts vs. Liberation/Carlito/DejaVu), read-only files
@@ -50,6 +50,7 @@ process groups on Linux), font substitution (Windows fonts vs. Liberation/Carlit
 | `CombineSessionTest.*` | Autosave → restore, `.folvio` project with embedded clipboard image, missing source reported |
 | `CombineGui.ImportReorderStraightenAnnotateExportReopen` | End to end through the GUI: import 3 photos, paste a screenshot with Ctrl+V, reorder with Ctrl+Up/Down, drag the four perspective handles with the mouse, Straighten, pen stroke, text box with Polish characters (Ctrl+V inside the text box pastes text, not a page), Ctrl+Z/Ctrl+Y, export, reopen with PDFium: 4 pages, order, straightened page, text |
 | `AutoChange.SubsetFontNamedLikeTheSystemFontStaysSeparate` | Regression found on Linux: a PDF embedding a font subset under the system font's exact PostScript name; edits needing that system font must not merge the two `/Font` resources (verified to fail without the fix on Windows and Linux) |
+| `Ocr.WorksWhenTheLanguageDataPathHasNonAnsiCharacters` | Regression found by the installer test on an English Windows: Tesseract reads arguments in the ANSI code page; Folvio now passes the image through stdin and reads TSV from stdout with relative language data, so folders like "Zażółć" or "Ψ 日本" work (fails without the fix on any Windows) |
 | `CombineGui.ActionsAreDisabledWhenTheyCannotRun` | *Next: Edit*, *Sort by name*, *Remove* enabled only when they can act |
 | `FormatDetector.*`, `PathUtils.*`, `SafeFileWriter.*`, `TextData.*`, `Planner.*`, `OutputValidator.*` | Units: magic bytes, sanitizing, CSV/JSON rules, route planning, missing dependencies, truncated outputs |
 
