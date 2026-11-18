@@ -271,6 +271,7 @@ TextStyle styleFromJson(const QJsonObject& o)
 QJsonObject EditOp::toJson() const
 {
     QJsonObject o{{"kind", int(kind)}, {"page", page}, {"blockId", blockId}, {"addedId", addedId}, {"text", text},
+                  {"batch", batch},
                   {"style", styleToJson(style)}, {"styleChanged", styleChanged}, {"ox", origin.x()},
                   {"oy", origin.y()}, {"width", width}};
     if (kind == Kind::AddImage) {
@@ -293,6 +294,7 @@ EditOp EditOp::fromJson(const QJsonObject& o)
     e.page = o.value("page").toInt();
     e.blockId = o.value("blockId").toInt(-1);
     e.addedId = o.value("addedId").toInt(-1);
+    e.batch = o.value("batch").toInt();
     e.text = o.value("text").toString();
     e.style = styleFromJson(o.value("style").toObject());
     e.styleChanged = o.value("styleChanged").toBool();
@@ -480,6 +482,50 @@ QSet<int> PdfEditSession::changedPages() const
     return pages;
 }
 
+bool PdfEditSession::applyBatch(const QList<EditOp>& ops, QString* error)
+{
+    if (ops.isEmpty())
+        return true;
+    if (ops.size() == 1)
+        return apply(ops.first(), error);
+    for (const EditOp& op : ops)
+        if (op.page < 0 || op.page >= pageCount()) {
+            if (error)
+                *error = tr("Invalid page.");
+            return false;
+        }
+    const bool wasModified = isModified();
+    const QList<EditOp> backup = m_ops;
+    const int backupCursor = m_cursor;
+    m_ops = m_ops.mid(0, m_cursor);
+    if (m_savedCursor > m_cursor)
+        m_savedCursor = -1;
+    int batchId = 1;
+    for (const EditOp& existing : m_ops)
+        batchId = std::max(batchId, existing.batch + 1);
+    for (EditOp op : ops) {
+        op.batch = batchId;
+        m_ops.append(op);
+    }
+    m_cursor = int(m_ops.size());
+    QString e;
+    if (!rebuild(&e)) {
+        m_ops = backup;
+        m_cursor = backupCursor;
+        rebuild(nullptr);
+        if (error)
+            *error = e;
+        return false;
+    }
+    QSet<int> pages;
+    for (const EditOp& op : ops)
+        pages.insert(op.page);
+    Q_EMIT documentChanged(pages);
+    if (wasModified != isModified())
+        Q_EMIT modifiedChanged(isModified());
+    return true;
+}
+
 bool PdfEditSession::apply(const EditOp& op, QString* error)
 {
     if (!m_original) {
@@ -520,10 +566,14 @@ bool PdfEditSession::undo()
     if (!canUndo())
         return false;
     const bool wasModified = isModified();
-    const int page = m_ops[m_cursor - 1].page;
-    --m_cursor;
+    QSet<int> pages;
+    const int batch = m_ops[m_cursor - 1].batch;
+    do {
+        pages.insert(m_ops[m_cursor - 1].page);
+        --m_cursor;
+    } while (batch != 0 && m_cursor > 0 && m_ops[m_cursor - 1].batch == batch);
     rebuild(nullptr);
-    Q_EMIT documentChanged({page});
+    Q_EMIT documentChanged(pages);
     if (wasModified != isModified())
         Q_EMIT modifiedChanged(isModified());
     return true;
@@ -534,10 +584,14 @@ bool PdfEditSession::redo()
     if (!canRedo())
         return false;
     const bool wasModified = isModified();
-    const int page = m_ops[m_cursor].page;
-    ++m_cursor;
+    QSet<int> pages;
+    const int batch = m_ops[m_cursor].batch;
+    do {
+        pages.insert(m_ops[m_cursor].page);
+        ++m_cursor;
+    } while (batch != 0 && m_cursor < m_ops.size() && m_ops[m_cursor].batch == batch);
     rebuild(nullptr);
-    Q_EMIT documentChanged({page});
+    Q_EMIT documentChanged(pages);
     if (wasModified != isModified())
         Q_EMIT modifiedChanged(isModified());
     return true;

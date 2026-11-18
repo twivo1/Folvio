@@ -1,0 +1,38 @@
+# Known limitations and roadmap
+
+Folvio 0.9 is a working pre-release, not a production-certified product.
+
+## Native PDF editing (Auto Change)
+* Edited lines are re-typeset with an installed TrueType font matched to the original (exact family when
+  installed, e.g. Calibri/Arial/Times; otherwise a metric-compatible substitute). Subset fonts embedded in the
+  PDF cannot be reused for new characters. The UI states which font was used.
+* A line whose text changes is written in one style; mixed bold/italic *inside* that line is unified (warned).
+* Text in form XObjects, rotated text and Type 3 fonts are shown but not editable in place.
+* Paragraph detection is heuristic; complex multi-column or table layouts may group lines differently than a
+  human would. Lines added beyond the original paragraph can overlap content below (warned).
+* Adding text grows only within the page; there is no automatic re-pagination (use reflow editing for that).
+* Encrypted PDFs: PDFium may write the saved file without encryption; Folvio detects this and warns before saving.
+* Digitally signed PDFs are saved incrementally; the signature will show the document as modified.
+
+## Reflow editing
+* Round trip goes through HTML/ODT: tracked changes, comments, fields, text boxes, headers/footers and section
+  layouts of DOCX files are not preserved by the editor (conversions DOCX→PDF keep them – tested).
+* PDF reflow quality depends on Microsoft Word (best) or LibreOffice (approximate).
+
+## OCR
+* Recognition produces an invisible, searchable text layer; scanned pages stay images. Editing *visible* text of a
+  scan (whiteout + retype) is not implemented yet.
+* OCR results always need review; uncertain words (< 70 % confidence) are highlighted.
+
+## Conversions
+* `PPTX→PNG` exports via PDF (one image per slide). XLSX→CSV exports the first sheet.
+* AVIF encoding and HEIC decoding depend on the FFmpeg build (verified with the gyan.dev full build).
+* Word-based conversions cannot be force-killed if Word itself hangs (it is a COM server outside the job object).
+
+## Roadmap
+1. Visual whiteout + retype for scanned pages using OCR boxes.
+2. Reuse of embedded fonts when all needed glyphs are present.
+3. Per-run style preservation in edited lines.
+4. Visual diff report export (Compare view already renders pixel differences).
+5. Code signing of the installer, MSIX package, Linux/macOS builds (architecture is portable; Windows specifics
+   are isolated in `ProcessRunner`, `SafeFileWriter`, `DependencyManager`).

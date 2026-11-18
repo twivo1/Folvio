@@ -53,6 +53,7 @@ struct EditOp {
     QRectF rect;            // AddImage: target rectangle (PDF space)
     QByteArray image;       // AddImage: PNG bytes
     QList<OcrWordPdf> words; // OcrLayer: invisible text layer
+    int batch = 0;          // ops sharing a non-zero batch id are undone/redone together
 
     QJsonObject toJson() const;
     static EditOp fromJson(const QJsonObject& o);
@@ -112,6 +113,8 @@ public:
     Hit hitTest(int page, const QPointF& pdfPoint) const;
 
     bool apply(const EditOp& op, QString* error = nullptr);
+    // Applies several operations with a single rebuild (e.g. "Replace all", OCR on many pages).
+    bool applyBatch(const QList<EditOp>& ops, QString* error = nullptr);
     bool canUndo() const { return m_cursor > 0; }
     bool canRedo() const { return m_cursor < m_ops.size(); }
     bool undo();

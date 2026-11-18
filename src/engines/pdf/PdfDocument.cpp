@@ -170,6 +170,25 @@ QSizeF PdfDocument::pageSize(int page) const
     return {};
 }
 
+QTransform PdfDocument::pageToDevice(int page, const QSizeF& deviceSize) const
+{
+    std::lock_guard lock(pdfiumMutex());
+    PdfPageHandle p(m_doc, page);
+    if (!p)
+        return {};
+    // FPDF_PageToDevice returns integers; map into a 1000x larger device for precision.
+    constexpr double k = 1000.0;
+    const int w = int(deviceSize.width() * k), h = int(deviceSize.height() * k);
+    auto map = [&](double x, double y) {
+        int dx = 0, dy = 0;
+        FPDF_PageToDevice(p.get(), 0, 0, w, h, 0, x, y, &dx, &dy);
+        return QPointF(dx / k, dy / k);
+    };
+    const QPointF o = map(0, 0), ex = map(1000, 0), ey = map(0, 1000);
+    return QTransform((ex.x() - o.x()) / 1000.0, (ex.y() - o.y()) / 1000.0, (ey.x() - o.x()) / 1000.0,
+                      (ey.y() - o.y()) / 1000.0, o.x(), o.y());
+}
+
 QImage PdfDocument::render(int page, double scale, bool withAnnotations) const
 {
     std::lock_guard lock(pdfiumMutex());

@@ -85,6 +85,9 @@ public:
 
     int pageCount() const;
     QSizeF pageSize(int page) const; // points
+    // Maps PDF user space of 'page' to a rendered image of 'deviceSize' pixels
+    // (handles /Rotate and crop box offsets).
+    QTransform pageToDevice(int page, const QSizeF& deviceSize) const;
     // Renders a page. scale = pixels per point. Background is white.
     QImage render(int page, double scale, bool withAnnotations = true) const;
     QString pageText(int page) const;

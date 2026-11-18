@@ -152,6 +152,12 @@ ToolInfo DependencyManager::detect(const QString& id)
             // soffice --version is slow; read the version from the install's version.ini instead.
             QSettings ini(QFileInfo(t.path).absolutePath() + "/version.ini", QSettings::IniFormat);
             t.version = ini.value(QStringLiteral("Version/MsiProductVersion")).toString();
+            if (t.version.isEmpty()) {
+                QSettings lo(QStringLiteral("HKEY_LOCAL_MACHINE\SOFTWARE\LibreOffice\LibreOffice"), QSettings::NativeFormat);
+                const QStringList versions = lo.childGroups();
+                if (!versions.isEmpty())
+                    t.version = versions.last();
+            }
         }
     } else if (id == "tesseract") {
         t.displayName = QStringLiteral("Tesseract OCR");

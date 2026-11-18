@@ -13,7 +13,8 @@ add_executable(folvio_tests
     test_core.cpp
     test_pdf.cpp
     test_autochange.cpp
-    test_conversions.cpp)
+    test_conversions.cpp
+    test_editor.cpp)
 target_link_libraries(folvio_tests PRIVATE folvio_lib GTest::gtest)
 add_custom_command(TARGET folvio_tests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PDFIUM_ROOT}/bin/pdfium.dll" "$<TARGET_FILE_DIR:folvio_tests>"
