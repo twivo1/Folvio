@@ -264,8 +264,9 @@ CombineWorkspace::CombineWorkspace(QWidget* parent) : QWidget(parent)
         if (!m_canvas->isEditingText())
             m_doc->undo();
     });
-    shortcut(QKeySequence::Redo, [this] { m_doc->redo(); });
-    shortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), [this] { m_doc->redo(); });
+    // Ctrl+Y and Ctrl+Shift+Z on every platform, as one shortcut (duplicates would be ambiguous).
+    shortcut(QKeySequence(Qt::CTRL | Qt::Key_Y), [this] { m_doc->redo(); })
+        ->setKeys({QKeySequence(Qt::CTRL | Qt::Key_Y), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z)});
     shortcut(QKeySequence::ZoomIn, [this] { zoomBy(1.15); });
     shortcut(QKeySequence(Qt::CTRL | Qt::Key_Equal), [this] { zoomBy(1.15); });
     shortcut(QKeySequence::ZoomOut, [this] { zoomBy(1 / 1.15); });
@@ -337,7 +338,7 @@ QWidget* CombineWorkspace::buildHeader()
     auto* menu = new QMenu(project);
     menu->addAction(tr("New combine…"), this, &CombineWorkspace::newProject);
     menu->addAction(tr("Open project (.folvio)…"), this, &CombineWorkspace::openProject);
-    menu->addAction(tr("Save project as…"), this, &CombineWorkspace::saveProject);
+    m_saveProjectAction = menu->addAction(tr("Save project as…"), this, &CombineWorkspace::saveProject);
     project->setMenu(menu);
     l->addWidget(m_undo);
     l->addWidget(m_redo);
@@ -433,7 +434,8 @@ QWidget* CombineWorkspace::buildArrange()
     add->setToolTip(tr("Add images (Ctrl+O)"));
     auto* paste = new QPushButton(Icons::get("file"), tr("Paste"), w);
     paste->setToolTip(tr("Add images from the clipboard (Ctrl+V)"));
-    auto* sort = new QPushButton(tr("Sort by name"), w);
+    m_btnSort = new QPushButton(tr("Sort by name"), w);
+    m_btnSort->setToolTip(tr("Order pages by file name (numbers in names are compared as numbers)"));
     m_btnUp = new QPushButton(Icons::get("chevron-up"), tr("Move up"), w);
     m_btnUp->setToolTip(tr("Move up (Ctrl+Up)"));
     m_btnDown = new QPushButton(Icons::get("chevron-down"), tr("Move down"), w);
@@ -447,14 +449,14 @@ QWidget* CombineWorkspace::buildArrange()
     tools->addWidget(makeSeparator(w));
     tools->addWidget(m_btnUp);
     tools->addWidget(m_btnDown);
-    tools->addWidget(sort);
+    tools->addWidget(m_btnSort);
     tools->addWidget(m_btnDuplicate);
     tools->addWidget(m_btnRemove);
     tools->addStretch();
     tools->addWidget(m_btnEdit);
-    auto* next = makePrimaryButton(tr("Next: Edit"), w);
-    next->setIcon(Icons::get("chevron-right", Icons::Tone::OnAccent));
-    tools->addWidget(next);
+    m_btnNextEdit = makePrimaryButton(tr("Next: Edit"), w);
+    m_btnNextEdit->setIcon(Icons::get("chevron-right", Icons::Tone::OnAccent));
+    tools->addWidget(m_btnNextEdit);
     l->addLayout(tools);
 
     m_arrangeStack = new QStackedWidget(w);
@@ -492,7 +494,7 @@ QWidget* CombineWorkspace::buildArrange()
         importFiles(files);
     });
     connect(paste, &QPushButton::clicked, this, &CombineWorkspace::pasteFromClipboard);
-    connect(sort, &QPushButton::clicked, m_doc, &CombineDocument::sortByName);
+    connect(m_btnSort, &QPushButton::clicked, m_doc, &CombineDocument::sortByName);
     connect(m_btnUp, &QPushButton::clicked, this, [this] {
         QList<int> rows = selectedRows(m_grid);
         if (rows.isEmpty() || rows.first() == 0)
@@ -517,7 +519,7 @@ QWidget* CombineWorkspace::buildArrange()
         const QList<int> rows = selectedRows(m_grid);
         openEditor(rows.isEmpty() ? 0 : rows.first());
     });
-    connect(next, &QPushButton::clicked, this, [this] { openEditor(selectedRows(m_grid).value(0, 0)); });
+    connect(m_btnNextEdit, &QPushButton::clicked, this, [this] { openEditor(selectedRows(m_grid).value(0, 0)); });
     connect(m_grid, &QListView::doubleClicked, this, [this](const QModelIndex& i) { openEditor(i.row()); });
     connect(m_grid, &QListView::customContextMenuRequested, this, [this](const QPoint& pos) {
         const QModelIndex idx = m_grid->indexAt(pos);
@@ -1766,6 +1768,10 @@ void CombineWorkspace::updateActions()
     m_btnUp->setEnabled(!sel.isEmpty() && sel.first() > 0);
     m_btnDown->setEnabled(!sel.isEmpty() && sel.last() < m_doc->count() - 1);
     m_btnEdit->setEnabled(has);
+    m_btnNextEdit->setEnabled(has);
+    m_btnSort->setEnabled(m_doc->count() > 1);
+    if (m_saveProjectAction)
+        m_saveProjectAction->setEnabled(has);
     for (int i = 1; i < 3; ++i)
         m_stepButtons->button(i)->setEnabled(has);
     if (m_exportButton)

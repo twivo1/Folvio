@@ -832,7 +832,8 @@ TEST(CombineGui, ImportReorderStraightenAnnotateExportReopen)
     CombineWorkspace ws;
     ws.resize(1500, 950);
     ws.show();
-    QTest::qWaitForWindowExposed(&ws);
+    ws.activateWindow(); // shortcuts need an active window (Xvfb has no window manager)
+    ASSERT_TRUE(QTest::qWaitForWindowActive(&ws, 3000));
     ws.importFiles(files);
     QSignalSpy imported(&ws, &CombineWorkspace::importFinished);
     ASSERT_TRUE(imported.wait(20000));
@@ -968,5 +969,39 @@ TEST(CombineGui, ImportReorderStraightenAnnotateExportReopen)
     // Source files untouched.
     for (const QString& f : files)
         EXPECT_TRUE(QFile::exists(f));
+    CombineSession::discardSession(nullptr);
+}
+
+TEST(CombineGui, ActionsAreDisabledWhenTheyCannotRun)
+{
+    QTemporaryDir dir;
+    CombineWorkspace ws;
+    ws.show();
+    auto button = [&](const QString& text) -> QAbstractButton* {
+        for (auto* b : ws.findChildren<QAbstractButton*>())
+            if (b->text() == text)
+                return b;
+        return nullptr;
+    };
+    QAbstractButton* next = button(QObject::tr("Next: Edit"));
+    QAbstractButton* sort = button(QObject::tr("Sort by name"));
+    QAbstractButton* remove = button(QObject::tr("Remove"));
+    ASSERT_TRUE(next && sort && remove);
+    EXPECT_FALSE(next->isEnabled());
+    EXPECT_FALSE(sort->isEnabled());
+    EXPECT_FALSE(remove->isEnabled());
+    ws.importFiles({savePng(dir, "one.png", makeDocument(0, QSize(200, 280)))});
+    QSignalSpy imported(&ws, &CombineWorkspace::importFinished);
+    ASSERT_TRUE(imported.wait(10000));
+    EXPECT_TRUE(next->isEnabled());
+    EXPECT_FALSE(sort->isEnabled()) << "sorting one page does nothing";
+    ws.importFiles({savePng(dir, "two.png", makeDocument(1, QSize(200, 280)))});
+    ASSERT_TRUE(imported.wait(10000));
+    EXPECT_TRUE(sort->isEnabled());
+    EXPECT_FALSE(remove->isEnabled()) << "nothing selected";
+    ws.document()->clear();
+    QTest::qWait(50);
+    EXPECT_FALSE(next->isEnabled());
+    EXPECT_FALSE(sort->isEnabled());
     CombineSession::discardSession(nullptr);
 }

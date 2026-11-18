@@ -118,7 +118,19 @@ bool runFfmpeg(const QStringList& args)
 
 static QString pythonExe()
 {
-    return QStandardPaths::findExecutable("python");
+    // "python3" first: on Linux "python" is often missing; on Windows python3 may be the Store stub,
+    // so "python" is preferred there.
+#ifdef Q_OS_WIN
+    const QStringList names = {"python", "python3"};
+#else
+    const QStringList names = {"python3", "python"};
+#endif
+    for (const QString& n : names) {
+        const QString p = QStandardPaths::findExecutable(n);
+        if (!p.isEmpty())
+            return p;
+    }
+    return {};
 }
 
 bool havePython()

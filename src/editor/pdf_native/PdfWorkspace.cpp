@@ -336,7 +336,10 @@ void PdfWorkspace::buildUi()
         else
             undo();
     });
-    auto* redoShortcut = new QShortcut(QKeySequence::Redo, this);
+    // Ctrl+Y and Ctrl+Shift+Z on every platform (QKeySequence::Redo differs between Windows and
+    // Linux; two shortcuts with the same key would be ambiguous and neither would fire).
+    auto* redoShortcut = new QShortcut(this);
+    redoShortcut->setKeys({QKeySequence(Qt::CTRL | Qt::Key_Y), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z)});
     redoShortcut->setContext(Qt::WidgetWithChildrenShortcut);
     connect(redoShortcut, &QShortcut::activated, this, [this] {
         if (m_editor->hasFocus())
@@ -344,9 +347,6 @@ void PdfWorkspace::buildUi()
         else
             redo();
     });
-    auto* redoAlt = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z), this);
-    redoAlt->setContext(Qt::WidgetWithChildrenShortcut);
-    connect(redoAlt, &QShortcut::activated, this, [this] { redo(); });
     auto* esc = new QShortcut(QKeySequence(Qt::Key_Escape), m_findBar);
     esc->setContext(Qt::WidgetWithChildrenShortcut);
     connect(esc, &QShortcut::activated, this, [this] {

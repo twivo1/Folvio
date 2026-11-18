@@ -163,13 +163,23 @@ TEST(Convert, DocxToPdfAndPdfToDocx)
     ASSERT_TRUE(makeTextPdf(srcPdf, {{"Dear customer,", "Your order 4711 has shipped."}}));
     const auto back = convert(srcPdf, "docx", dir.path());
     ASSERT_TRUE(back.ok) << back.error.toStdString();
-    // Verify text by converting the DOCX to TXT.
-    const auto txt = convert(back.outputs.first(), "txt", dir.path());
-    ASSERT_TRUE(txt.ok) << txt.error.toStdString();
-    QFile t(txt.outputs.first());
-    ASSERT_TRUE(t.open(QIODevice::ReadOnly));
-    const QString plain = QString::fromUtf8(t.readAll());
-    EXPECT_TRUE(plain.contains("4711")) << plain.toStdString();
+    // Verify the text inside the DOCX itself. Word rebuilds flowing paragraphs; LibreOffice keeps the
+    // PDF layout with positioned text boxes, which a DOCX->TXT export would skip.
+    ASSERT_TRUE(OutputValidator::zipEntries(back.outputs.first()).contains("word/document.xml"));
+    if (havePython()) {
+        EXPECT_TRUE(runPython("import sys, zipfile, re\n"
+                              "x = zipfile.ZipFile(sys.argv[1]).read('word/document.xml').decode('utf-8')\n"
+                              "t = ''.join(re.findall(r'<w:t(?: [^>]*)?>([^<]*)</w:t>', x))\n"
+                              "sys.exit(0 if '4711' in t and 'customer' in t else 1)\n",
+                              {back.outputs.first()}))
+            << "the DOCX must contain the PDF's text";
+    } else {
+        const auto txt = convert(back.outputs.first(), "txt", dir.path());
+        ASSERT_TRUE(txt.ok) << txt.error.toStdString();
+        QFile t(txt.outputs.first());
+        ASSERT_TRUE(t.open(QIODevice::ReadOnly));
+        EXPECT_TRUE(QString::fromUtf8(t.readAll()).contains("4711"));
+    }
 }
 
 TEST(Convert, XlsxCsvJsonChain)

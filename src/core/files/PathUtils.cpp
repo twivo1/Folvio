@@ -1,6 +1,7 @@
 #include "core/files/PathUtils.h"
 
 #include <QDateTime>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
@@ -22,6 +23,19 @@ QString PathUtils::appDataDir()
     if (base.isEmpty())
         base = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/Folvio");
     return ensureDir(QDir::cleanPath(base));
+}
+
+QString PathUtils::resourceDir()
+{
+    // Windows and development builds: <exe dir>/engines. Linux packages (FHS, AppImage): <prefix>/share/folvio/engines.
+    const QString exeDir = QCoreApplication::instance() ? QCoreApplication::applicationDirPath() : QDir::currentPath();
+    const QString local = exeDir + QStringLiteral("/engines");
+    if (QFileInfo(local).isDir())
+        return local;
+    const QString shared = QDir::cleanPath(exeDir + QStringLiteral("/../share/folvio/engines"));
+    if (QFileInfo(shared).isDir())
+        return shared;
+    return local;
 }
 
 QString PathUtils::backupDir() { return ensureDir(appDataDir() + QStringLiteral("/backups")); }

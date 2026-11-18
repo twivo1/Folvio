@@ -110,11 +110,19 @@ TEST(Pdf, UnusualFontsAreMatchedAndEditable)
     ASSERT_FALSE(runs.isEmpty());
     const FontMatch m = FontMatcher::match(runs.first().fontName, false, false, false, true);
     ASSERT_TRUE(m.isValid());
-    EXPECT_EQ(m.family, "Courier New") << runs.first().fontName.toStdString();
     // Exotic names fall back to a sensible installed family.
     EXPECT_TRUE(FontMatcher::match("ABCDEF+SomeCustomGrotesk-Bold", true, false, false, false).isValid());
+#ifdef Q_OS_WIN
+    EXPECT_EQ(m.family, "Courier New") << runs.first().fontName.toStdString();
     EXPECT_EQ(FontMatcher::match("TimesNewRomanPS-BoldMT", true, false, true, false).family, "Times New Roman");
     EXPECT_EQ(FontMatcher::match("Helvetica-Oblique", false, true, false, false).family, "Arial");
+#else
+    // Linux: metric-compatible free substitutes (shipped with Folvio's packages).
+    EXPECT_EQ(m.family, "Liberation Mono") << runs.first().fontName.toStdString();
+    EXPECT_EQ(FontMatcher::match("TimesNewRomanPS-BoldMT", true, false, true, false).family, "Liberation Serif");
+    EXPECT_EQ(FontMatcher::match("Helvetica-Oblique", false, true, false, false).family, "Liberation Sans");
+    EXPECT_EQ(FontMatcher::match("Calibri", false, false, false, false).family, "Carlito");
+#endif
 }
 
 TEST(Pdf, LayoutGroupsParagraphLines)

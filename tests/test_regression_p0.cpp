@@ -349,6 +349,11 @@ struct UiFixture {
         pdf = copyFixture(dir);
         ws.resize(1300, 900);
         ws.show();
+        // Shortcuts (Ctrl+S) only reach an active window; X servers without a window manager
+        // (Xvfb in CI) do not activate new windows on their own.
+        ws.activateWindow();
+        if (!QTest::qWaitForWindowActive(&ws, 3000))
+            ADD_FAILURE() << "test window could not be activated";
         QString err;
         if (!ws.openFile(pdf, &err))
             ADD_FAILURE() << err.toStdString();

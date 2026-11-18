@@ -35,6 +35,11 @@ QString sanitizeText(const QString& text);
 // Text with whitespace removed - used to compare what was written with what is read back.
 QString compact(const QString& text);
 
+// PostScript name (name ID 6) of a TrueType/OpenType font file, or empty.
+QString fontPostScriptName(const QByteArray& fontData);
+// Copy of the font whose PostScript name is "<tag>+<name>" (see PdfTextWriter.cpp).
+QByteArray withTaggedPostScriptName(const QByteArray& fontData, const QByteArray& tag);
+
 // A font that can be used to write new text.
 struct WriterFont {
     Font handle = nullptr;

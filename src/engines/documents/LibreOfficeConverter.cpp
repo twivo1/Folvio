@@ -188,6 +188,7 @@ ConversionResult LibreOfficeConverter::runConversion(const QString& inputPath, c
     // LibreOffice reads these to avoid touching the user's real profile/temp.
     spec.environment.insert("TMP", QDir::toNativeSeparators(work));
     spec.environment.insert("TEMP", QDir::toNativeSeparators(work));
+    spec.environment.insert("TMPDIR", work);
 
     ctx.stepProgress(0.1, QObject::tr("LibreOffice is converting…"));
     const ProcessResult pr = ctx.run(spec);

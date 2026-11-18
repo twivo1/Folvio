@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Folvio
+GenericName=File converter and PDF editor
+Comment=Convert, edit and combine files in one desktop workspace
+Exec=folvio %F
+Icon=io.github.twivo1.Folvio
+Terminal=false
+Categories=Office;Graphics;Utility;
+Keywords=PDF;convert;converter;OCR;combine;scan;edit;
+MimeType=application/pdf;image/png;image/jpeg;image/webp;image/tiff;image/bmp;application/vnd.openxmlformats-officedocument.wordprocessingml.document;application/vnd.oasis.opendocument.text;video/mp4;audio/mpeg;
+StartupWMClass=folvio

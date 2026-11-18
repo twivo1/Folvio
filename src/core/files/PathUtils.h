@@ -8,6 +8,7 @@ class PathUtils {
 public:
     // Per-user application data directory (%LOCALAPPDATA%\Folvio). Created on demand.
     static QString appDataDir();
+    static QString resourceDir(); // bundled runtime data (tessdata, helper scripts, engines)
     static QString backupDir();
     static QString tempRoot();     // %LOCALAPPDATA%\Folvio\temp
     static QString recoveryDir();

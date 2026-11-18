@@ -10,7 +10,9 @@
 #include <fpdf_text.h>
 #include <fpdfview.h>
 
+#include <algorithm>
 #include <cmath>
+#include <tuple>
 
 namespace folvio::pdfedit {
 
@@ -33,6 +35,55 @@ QByteArray fontFileData(const QString& path)
     const QByteArray data = f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
     cache.insert(path, data);
     return data;
+}
+
+
+// ---- unique PostScript name ---------------------------------------------------------
+// PDFium's content generator shares one /Font resource between fonts with the same
+// (BaseFont, Subtype). A system font embedded by Folvio gets its BaseFont from the font's
+// PostScript name; if the PDF already embeds a subset of that very font without a subset
+// tag (e.g. "LiberationSans" written by Qt on Linux), the untouched text would be switched to
+// our font and become garbage. The copy we embed therefore gets a subset-style tag
+// ("FVABCD+LiberationSans") by rewriting the 'name' table (appended as a new table; the old
+// one stays unreferenced). Returns the input unchanged if the font cannot be parsed.
+
+quint32 be32(const QByteArray& d, int o)
+{
+    const auto* u = reinterpret_cast<const uchar*>(d.constData());
+    return (quint32(u[o]) << 24) | (quint32(u[o + 1]) << 16) | (quint32(u[o + 2]) << 8) | quint32(u[o + 3]);
+}
+quint16 be16(const QByteArray& d, int o)
+{
+    const auto* u = reinterpret_cast<const uchar*>(d.constData());
+    return quint16((u[o] << 8) | u[o + 1]);
+}
+void put16(QByteArray& d, quint16 v)
+{
+    d.append(char(v >> 8));
+    d.append(char(v & 0xff));
+}
+void set32(QByteArray& d, int o, quint32 v)
+{
+    d[o] = char(v >> 24);
+    d[o + 1] = char((v >> 16) & 0xff);
+    d[o + 2] = char((v >> 8) & 0xff);
+    d[o + 3] = char(v & 0xff);
+}
+
+// Deterministic 4-letter tag per font file: "FV" + 4 letters.
+QByteArray subsetTag(const QString& path)
+{
+    quint32 h = 2166136261u;
+    for (QChar c : path) {
+        h ^= c.unicode();
+        h *= 16777619u;
+    }
+    QByteArray tag("FV");
+    for (int i = 0; i < 4; ++i) {
+        tag.append(char('A' + h % 26));
+        h /= 26;
+    }
+    return tag;
 }
 
 const QRawFont& rawFont(const QString& path)
@@ -127,6 +178,147 @@ Obj createObject(Doc doc, Page page, Font font, double rawSize, const QString& t
 
 } // namespace
 
+QString fontPostScriptName(const QByteArray& font)
+{
+    // Reuse the rewriting code: tag with an empty marker and read the name back is overkill;
+    // parse directly instead.
+    if (font.size() < 12)
+        return {};
+    const int numTables = be16(font, 4);
+    for (int i = 0; i < numTables; ++i) {
+        const int r = 12 + 16 * i;
+        if (r + 16 > font.size() || font.mid(r, 4) != "name")
+            continue;
+        const int off = int(be32(font, r + 8)), len = int(be32(font, r + 12));
+        if (off < 0 || len < 6 || off + len > font.size())
+            return {};
+        const QByteArray name = font.mid(off, len);
+        const int count = be16(name, 2), storage = be16(name, 4);
+        QString mac;
+        for (int k = 0; k < count && 6 + 12 * k + 12 <= name.size(); ++k) {
+            const int rec = 6 + 12 * k;
+            const int platform = be16(name, rec), nameId = be16(name, rec + 6);
+            const int l = be16(name, rec + 8), o = be16(name, rec + 10);
+            if (nameId != 6 || storage + o + l > name.size())
+                continue;
+            const QByteArray text = name.mid(storage + o, l);
+            if (platform == 3 || platform == 0) {
+                QString out;
+                for (int j = 0; j + 1 < text.size(); j += 2)
+                    out += QChar(be16(text, j));
+                return out;
+            }
+            if (mac.isEmpty())
+                mac = QString::fromLatin1(text);
+        }
+        return mac;
+    }
+    return {};
+}
+
+QByteArray withTaggedPostScriptName(const QByteArray& font, const QByteArray& tag)
+{
+    if (font.size() < 12)
+        return font;
+    const quint32 version = be32(font, 0);
+    if (version != 0x00010000 && version != 0x4F54544F /*OTTO*/ && version != 0x74727565 /*true*/)
+        return font;
+    const int numTables = be16(font, 4);
+    int nameRecord = -1;
+    for (int i = 0; i < numTables; ++i) {
+        const int r = 12 + 16 * i;
+        if (r + 16 > font.size())
+            return font;
+        if (font.mid(r, 4) == "name")
+            nameRecord = r;
+    }
+    if (nameRecord < 0)
+        return font;
+    const int off = int(be32(font, nameRecord + 8));
+    const int len = int(be32(font, nameRecord + 12));
+    if (off < 0 || len < 6 || off + len > font.size())
+        return font;
+    const QByteArray name = font.mid(off, len);
+    const int count = be16(name, 2);
+    const int storage = be16(name, 4);
+    if (6 + 12 * count > name.size())
+        return font;
+
+    struct Rec {
+        quint16 platform, encoding, language, nameId;
+        QByteArray text;
+    };
+    QList<Rec> recs;
+    QString psName;
+    for (int i = 0; i < count; ++i) {
+        const int r = 6 + 12 * i;
+        Rec rec{be16(name, r), be16(name, r + 2), be16(name, r + 4), be16(name, r + 6), {}};
+        const int l = be16(name, r + 8), o = be16(name, r + 10);
+        if (storage + o + l > name.size())
+            return font;
+        rec.text = name.mid(storage + o, l);
+        if (rec.language >= 0x8000)
+            return font; // language-tag records (format 1) are not rewritten
+        if (rec.nameId == 6) {
+            if (psName.isEmpty()) {
+                if (rec.platform == 3 || rec.platform == 0) {
+                    QString s;
+                    for (int k = 0; k + 1 < rec.text.size(); k += 2)
+                        s += QChar(be16(rec.text, k));
+                    psName = s;
+                } else {
+                    psName = QString::fromLatin1(rec.text);
+                }
+            }
+            continue;
+        }
+        recs << rec;
+    }
+    if (psName.isEmpty())
+        return font;
+    const QString tagged = QString::fromLatin1(tag) + QLatin1Char('+') + psName;
+    QByteArray utf16;
+    for (QChar c : tagged)
+        put16(utf16, c.unicode());
+    recs << Rec{3, 1, 0x409, 6, utf16} << Rec{1, 0, 0, 6, tagged.toLatin1()};
+    std::sort(recs.begin(), recs.end(), [](const Rec& a, const Rec& b) {
+        return std::tie(a.platform, a.encoding, a.language, a.nameId) < std::tie(b.platform, b.encoding, b.language, b.nameId);
+    });
+
+    QByteArray table, strings;
+    put16(table, 0);
+    put16(table, quint16(recs.size()));
+    put16(table, quint16(6 + 12 * recs.size()));
+    for (const Rec& r : recs) {
+        put16(table, r.platform);
+        put16(table, r.encoding);
+        put16(table, r.language);
+        put16(table, r.nameId);
+        put16(table, quint16(r.text.size()));
+        put16(table, quint16(strings.size()));
+        strings += r.text;
+    }
+    table += strings;
+    const int tableLength = int(table.size());
+    while (table.size() % 4)
+        table.append('\0');
+
+    QByteArray out = font;
+    while (out.size() % 4)
+        out.append('\0');
+    const int newOffset = int(out.size());
+    out += table;
+    quint32 sum = 0;
+    for (int i = 0; i < table.size(); i += 4)
+        sum += be32(table, i);
+    set32(out, nameRecord + 4, sum);
+    set32(out, nameRecord + 8, quint32(newOffset));
+    set32(out, nameRecord + 12, quint32(tableLength));
+    return out;
+}
+
+
+
 QString sanitizeText(const QString& text)
 {
     QString s = text;
@@ -217,8 +409,10 @@ WriterFont* FontProvider::system(const QString& filePath, QString* error)
     }
     const QByteArray toUnicode = buildToUnicode(raw, m_charset);
     const QByteArray cidToGid = identityCidToGid(raw);
-    Font handle = FPDFText_LoadCidType2Font(m_doc, reinterpret_cast<const uint8_t*>(data.constData()),
-                                            uint32_t(data.size()), toUnicode.constData(),
+    // Never share a name with a font the document already embeds (see withTaggedPostScriptName).
+    const QByteArray tagged = withTaggedPostScriptName(data, subsetTag(filePath));
+    Font handle = FPDFText_LoadCidType2Font(m_doc, reinterpret_cast<const uint8_t*>(tagged.constData()),
+                                            uint32_t(tagged.size()), toUnicode.constData(),
                                             reinterpret_cast<const uint8_t*>(cidToGid.constData()),
                                             uint32_t(cidToGid.size()));
     if (!handle) {

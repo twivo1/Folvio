@@ -6,6 +6,7 @@
 #>
 param(
     [string]$Version = "4.10.0",
+    [string]$Sha256 = "b2171af5be6b26f7a06b1229948bbb2bdaa74fcf5cd097e0af6378fce50a6eb9",
     [string]$QtTools = "C:\Qt\Tools"
 )
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,8 @@ if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
     New-Item -ItemType Directory -Force $srcRoot | Out-Null
     $tgz = Join-Path $srcRoot "opencv-$Version.tar.gz"
     Invoke-WebRequest -Uri "https://github.com/opencv/opencv/archive/refs/tags/$Version.tar.gz" -OutFile $tgz
+    $actual = (Get-FileHash -Algorithm SHA256 $tgz).Hash.ToLower()
+    if ($actual -ne $Sha256) { throw "OpenCV source checksum mismatch: $actual" }
     tar -xzf $tgz -C $srcRoot
 }
 

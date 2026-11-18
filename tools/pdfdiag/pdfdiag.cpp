@@ -9,6 +9,7 @@
 // Prints structure and statistics; never writes next to the input file.
 #include "core/conversions/ConversionRegistry.h"
 #include "editor/pdf_native/PdfEditSession.h"
+#include "editor/pdf_native/FontMatcher.h"
 #include "engines/pdf/PdfDocument.h"
 
 #include <QApplication>
@@ -16,6 +17,7 @@
 #include <QFile>
 #include <QMap>
 #include <QPainter>
+#include <QPdfWriter>
 #include <QRawFont>
 #include <QRegularExpression>
 
@@ -182,7 +184,7 @@ static void cidtest(const QString& outPath)
     auto doc = PdfDocument::createEmpty();
     std::lock_guard lock(pdfiumMutex());
     FPDF_PAGE page = FPDFPage_New(doc->handle(), 0, 595, 842);
-    const QString fontPath = QStringLiteral("C:/Windows/Fonts/arial.ttf");
+    const QString fontPath = folvio::FontMatcher::byFamily(QStringLiteral("Arial"), false, false).filePath;
     QFile ff(fontPath);
     ff.open(QIODevice::ReadOnly);
     const QByteArray data = ff.readAll();
@@ -312,6 +314,20 @@ int main(int argc, char** argv)
             }
         std::printf("block not found\n");
         return 1;
+    }
+    else if (cmd == "mktext" && argc >= 4) {
+        // pdfdiag mktext out.pdf "line 1" ["line 2" ...]  (QPdfWriter, Arial 14 pt, like the tests)
+        QPdfWriter w(file);
+        w.setPageSize(QPageSize(QPageSize::A4));
+        w.setResolution(72);
+        w.setPageMargins(QMarginsF(0, 0, 0, 0));
+        QPainter p(&w);
+        QFont f(QStringLiteral("Arial"));
+        f.setPointSizeF(14);
+        p.setFont(f);
+        for (int i = 3; i < argc; ++i)
+            p.drawText(72, 100 + 28 * (i - 3), QString::fromUtf8(argv[i]));
+        return p.end() ? 0 : 1;
     }
     else if (cmd == "sweep")
         return sweep(file, argc > 3 ? QString::fromLocal8Bit(argv[3]) : QDir::tempPath() + "/pdfdiag");

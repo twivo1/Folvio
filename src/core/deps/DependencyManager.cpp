@@ -72,6 +72,17 @@ QString appDir()
     return QCoreApplication::instance() ? QCoreApplication::applicationDirPath() : QDir::currentPath();
 }
 
+#ifndef Q_OS_WIN
+// Expands "parent/pattern + tail", e.g. /opt/libreoffice*/program/soffice (newest first).
+QStringList globDirs(const QString& parent, const QString& pattern, const QString& tail)
+{
+    QStringList out;
+    for (const QFileInfo& fi : QDir(parent).entryInfoList({pattern}, QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed))
+        out << fi.absoluteFilePath() + tail;
+    return out;
+}
+#endif
+
 QString envPath(const char* name)
 {
     return QString::fromLocal8Bit(qgetenv(name));
@@ -102,16 +113,18 @@ ToolInfo DependencyManager::detect(const QString& id)
         overridePath = m_overrides.value(id);
     }
     const QString envOverride = envPath(("FOLVIO_" + id.toUpper().toLatin1()).constData());
+    const QString bundled = PathUtils::resourceDir();
+#ifdef Q_OS_WIN
     const QString pf = envPath("ProgramFiles");
     const QString pf86 = envPath("ProgramFiles(x86)");
     const QString local = envPath("LOCALAPPDATA");
-    const QString bundled = appDir() + QStringLiteral("/engines");
+#endif
 
     if (id == "pdfium") {
         t.displayName = QStringLiteral("PDFium");
         t.license = QStringLiteral("BSD-3-Clause / Apache-2.0");
         t.purpose = QObject::tr("PDF rendering, analysis and native editing (built in)");
-        t.path = appDir() + QStringLiteral("/pdfium.dll");
+        t.path = appDir();
         t.available = true; // linked into the application
         t.optional = false;
         t.version = QStringLiteral("bundled");
@@ -122,11 +135,18 @@ ToolInfo DependencyManager::detect(const QString& id)
         t.license = QStringLiteral("LGPL-2.1+ / GPL (depends on build), separate process");
         t.purpose = id == "ffmpeg" ? QObject::tr("Audio, video, HEIC and AVIF conversion")
                                    : QObject::tr("Media stream analysis");
+#ifdef Q_OS_WIN
         t.installHint = QStringLiteral("winget install Gyan.FFmpeg");
         const QString exe = id + QStringLiteral(".exe");
         t.path = firstExisting({overridePath, envOverride, bundled + "/ffmpeg/" + exe, bundled + "/ffmpeg/bin/" + exe,
                                 local + "/Microsoft/WinGet/Links/" + exe,
                                 QStandardPaths::findExecutable(id)});
+#else
+        t.installHint = QObject::tr("Install FFmpeg from your distribution: sudo apt install ffmpeg (Ubuntu/Debian) "
+                                    "or sudo dnf install ffmpeg-free (Fedora)");
+        t.path = firstExisting({overridePath, envOverride, bundled + "/ffmpeg/" + id, QStandardPaths::findExecutable(id),
+                                "/usr/bin/" + id, "/usr/local/bin/" + id, "/snap/bin/" + id});
+#endif
         if (!t.path.isEmpty()) {
             // winget "Links" are symlinks; resolve to the real binary for QProcess.
             const QString target = QFileInfo(t.path).symLinkTarget();
@@ -138,6 +158,7 @@ ToolInfo DependencyManager::detect(const QString& id)
         t.displayName = QStringLiteral("LibreOffice");
         t.license = QStringLiteral("MPL-2.0, separate process");
         t.purpose = QObject::tr("Office document conversion (DOCX, ODT, RTF, XLSX, PPTX)");
+#ifdef Q_OS_WIN
         t.installHint = QStringLiteral("winget install TheDocumentFoundation.LibreOffice");
         QStringList cands = {overridePath, envOverride, bundled + "/libreoffice/program/soffice.com",
                              pf + "/LibreOffice/program/soffice.com", pf86 + "/LibreOffice/program/soffice.com"};
@@ -153,26 +174,53 @@ ToolInfo DependencyManager::detect(const QString& id)
             QSettings ini(QFileInfo(t.path).absolutePath() + "/version.ini", QSettings::IniFormat);
             t.version = ini.value(QStringLiteral("Version/MsiProductVersion")).toString();
             if (t.version.isEmpty()) {
-                QSettings lo(QStringLiteral("HKEY_LOCAL_MACHINE\SOFTWARE\LibreOffice\LibreOffice"), QSettings::NativeFormat);
+                QSettings lo(QStringLiteral("HKEY_LOCAL_MACHINE\\SOFTWARE\\LibreOffice\\LibreOffice"), QSettings::NativeFormat);
                 const QStringList versions = lo.childGroups();
                 if (!versions.isEmpty())
                     t.version = versions.last();
             }
         }
+#else
+        t.installHint = QObject::tr("Install LibreOffice from your distribution: sudo apt install libreoffice-writer "
+                                    "libreoffice-calc libreoffice-impress (Ubuntu/Debian) or sudo dnf install libreoffice (Fedora)");
+        QStringList cands = {overridePath, envOverride, QStandardPaths::findExecutable(QStringLiteral("soffice")),
+                             QStandardPaths::findExecutable(QStringLiteral("libreoffice")),
+                             "/usr/lib/libreoffice/program/soffice", "/usr/lib64/libreoffice/program/soffice",
+                             "/snap/bin/libreoffice"};
+        cands << globDirs("/opt", "libreoffice*", "/program/soffice");
+        t.path = firstExisting(cands);
+        if (!t.path.isEmpty()) {
+            // Distribution wrappers (/usr/bin/soffice) link into the install; the version is in versionrc.
+            const QString real = QFileInfo(t.path).canonicalFilePath();
+            QSettings rc(QFileInfo(real).absolutePath() + "/versionrc", QSettings::IniFormat);
+            t.version = rc.value(QStringLiteral("Version/ProductKey")).toString().section(' ', -1); // "LibreOffice 24.2"
+            if (t.version.isEmpty())
+                t.version = rc.value(QStringLiteral("Version/ProductMajor")).toString();
+        }
+#endif
     } else if (id == "tesseract") {
         t.displayName = QStringLiteral("Tesseract OCR");
         t.license = QStringLiteral("Apache-2.0, separate process");
         t.purpose = QObject::tr("Text recognition for scanned PDFs and images");
+#ifdef Q_OS_WIN
         t.installHint = QStringLiteral("winget install UB-Mannheim.TesseractOCR");
         t.path = firstExisting({overridePath, envOverride, bundled + "/tesseract/tesseract.exe",
                                 pf + "/Tesseract-OCR/tesseract.exe", local + "/Programs/Tesseract-OCR/tesseract.exe",
                                 QStandardPaths::findExecutable(QStringLiteral("tesseract"))});
+#else
+        t.installHint = QObject::tr("Install Tesseract from your distribution: sudo apt install tesseract-ocr (Ubuntu/Debian) "
+                                    "or sudo dnf install tesseract (Fedora). Polish and English data are included with Folvio.");
+        t.path = firstExisting({overridePath, envOverride, bundled + "/tesseract/tesseract",
+                                QStandardPaths::findExecutable(QStringLiteral("tesseract")), "/usr/bin/tesseract",
+                                "/usr/local/bin/tesseract"});
+#endif
         if (!t.path.isEmpty())
             t.version = versionOf(t.path, {"--version"}, QStringLiteral("tesseract v?(\\S+)"));
     } else if (id == "word") {
         t.displayName = QStringLiteral("Microsoft Word");
         t.license = QObject::tr("Proprietary, uses the user's own Office licence (optional)");
         t.purpose = QObject::tr("High quality PDF to DOCX reconstruction");
+#ifdef Q_OS_WIN
         t.installHint = QObject::tr("Optional. Install Microsoft 365 / Office.");
         QSettings clsid(QStringLiteral("HKEY_CLASSES_ROOT\\Word.Application\\CLSID"), QSettings::NativeFormat);
         const QString powershell = firstExisting({envPath("SystemRoot") + "/System32/WindowsPowerShell/v1.0/powershell.exe"});
@@ -182,6 +230,10 @@ ToolInfo DependencyManager::detect(const QString& id)
             QSettings ver(QStringLiteral("HKEY_CLASSES_ROOT\\Word.Application\\CurVer"), QSettings::NativeFormat);
             t.version = ver.value(QStringLiteral(".")).toString();
         }
+#else
+        t.installHint = QObject::tr("Microsoft Word is only available on Windows. On Linux, LibreOffice is used "
+                                    "for PDF to DOCX (the layout is reconstructed less faithfully).");
+#endif
     }
     t.available = !t.path.isEmpty();
     return t;
@@ -190,7 +242,7 @@ ToolInfo DependencyManager::detect(const QString& id)
 QStringList DependencyManager::tesseractLanguages()
 {
     QStringList langs;
-    const QStringList dirs = {appDir() + "/engines/tessdata", PathUtils::appDataDir() + "/tessdata",
+    const QStringList dirs = {PathUtils::resourceDir() + "/tessdata", PathUtils::appDataDir() + "/tessdata",
                               QFileInfo(path("tesseract")).absolutePath() + "/tessdata"};
     for (const QString& d : dirs)
         for (const QFileInfo& fi : QDir(d).entryInfoList({"*.traineddata"}, QDir::Files))
@@ -201,7 +253,7 @@ QStringList DependencyManager::tesseractLanguages()
 
 QString DependencyManager::tessdataDir(const QStringList& languages)
 {
-    const QStringList dirs = {appDir() + "/engines/tessdata", PathUtils::appDataDir() + "/tessdata",
+    const QStringList dirs = {PathUtils::resourceDir() + "/tessdata", PathUtils::appDataDir() + "/tessdata",
                               QFileInfo(path("tesseract")).absolutePath() + "/tessdata"};
     for (const QString& d : dirs) {
         bool all = QDir(d).exists();

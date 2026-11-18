@@ -19,6 +19,8 @@
 #include <QJsonObject>
 #include <QTemporaryDir>
 
+#include <QTest>
+
 #include <gtest/gtest.h>
 
 using namespace folvio;
@@ -102,30 +104,51 @@ TEST(SafeFileWriter, ValidationFailureLeavesTargetUntouched)
 TEST(ProcessRunner, ArgumentsAreNotInterpretedByAShell)
 {
     // A path containing shell metacharacters must arrive verbatim.
-    const QString cmd = QDir::fromNativeSeparators(qEnvironmentVariable("ComSpec", "C:/Windows/System32/cmd.exe"));
     QTemporaryDir dir;
     const QString weird = dir.filePath("a & echo HACKED > pwned.txt.bin");
     ProcessSpec spec;
-    spec.program = cmd;
+#ifdef Q_OS_WIN
+    spec.program = QDir::fromNativeSeparators(qEnvironmentVariable("ComSpec", "C:/Windows/System32/cmd.exe"));
     spec.arguments = {"/c", "if", "exist", QDir::toNativeSeparators(weird), "(echo yes)", "else", "(echo no)"};
+#else
+    spec.program = QStringLiteral("/bin/sh");
+    spec.arguments = {"-c", "test -e \"$1\" && echo yes || echo no", "sh", weird};
+#endif
     spec.workingDirectory = dir.path();
-    ProcessRunner::run(spec);
+    const ProcessResult r = ProcessRunner::run(spec);
+    EXPECT_TRUE(r.started);
+#ifndef Q_OS_WIN
+    EXPECT_TRUE(r.stdOut.contains("no")); // the argument arrived as one literal path
+#endif
     EXPECT_FALSE(QFileInfo::exists(dir.filePath("pwned.txt")));
 }
 
 TEST(ProcessRunner, TimeoutAndCancelKillProcessTree)
 {
-    const QString ps = qEnvironmentVariable("SystemRoot", "C:/Windows") + "/System32/WindowsPowerShell/v1.0/powershell.exe";
     ProcessSpec spec;
-    spec.program = ps;
+#ifdef Q_OS_WIN
+    spec.program = qEnvironmentVariable("SystemRoot", "C:/Windows") + "/System32/WindowsPowerShell/v1.0/powershell.exe";
     spec.arguments = {"-NoProfile", "-Command", "Start-Sleep -Seconds 30"};
+#else
+    // The shell starts a grandchild; cancelling must kill it as well.
+    spec.program = QStringLiteral("/bin/sh");
+    spec.arguments = {"-c", "sleep 30 & echo $!; wait"};
+#endif
     spec.timeoutMs = 1500;
     QElapsedTimer t;
     t.start();
     ProcessResult r = ProcessRunner::run(spec);
     EXPECT_TRUE(r.timedOut);
     EXPECT_LT(t.elapsed(), 10000);
-    std::atomic_bool cancel{false};
+#ifndef Q_OS_WIN
+    const qint64 grandchild = r.stdOut.trimmed().toLongLong();
+    ASSERT_GT(grandchild, 0);
+    QTest::qWait(200);
+    // Gone (or at most a zombie waiting for init to reap it).
+    QFile stat(QStringLiteral("/proc/%1/stat").arg(grandchild));
+    if (stat.open(QIODevice::ReadOnly))
+        EXPECT_TRUE(stat.readAll().contains(") Z ")) << "grandchild still running";
+#endif
     spec.timeoutMs = 60000;
     t.restart();
     r = ProcessRunner::run(spec, [&] { return t.elapsed() > 800; });

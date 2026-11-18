@@ -2,7 +2,9 @@
 #include "TestSupport.h"
 
 #include "core/files/SafeFileWriter.h"
+#include "editor/pdf_native/FontMatcher.h"
 #include "editor/pdf_native/PdfEditSession.h"
+#include "editor/pdf_native/PdfTextWriter.h"
 #include "engines/pdf/PdfDocument.h"
 
 #include <QDir>
@@ -96,6 +98,62 @@ TEST(AutoChange, EndToEndOriginalToEditedDocument)
     // No stray temp files next to the document.
     const QStringList leftovers = QDir(dir.path()).entryList({".~folvio-*"}, QDir::Files | QDir::Hidden);
     EXPECT_TRUE(leftovers.isEmpty());
+}
+
+// Regression (found on Linux): the PDF embeds a *subset* of a system font under exactly that font's
+// PostScript name as BaseFont (Qt on Linux writes "LiberationSans"). An edit needing glyphs missing
+// from the subset embedded the system font again with the same BaseFont; PDFium merged both /Font
+// resources and every untouched line was re-encoded with the wrong font (save refused).
+// The fixture reproduces this on every platform: a QPdfWriter subset renamed (same byte length,
+// so the xref stays valid) to the PostScript name of the font Folvio will pick.
+TEST(AutoChange, SubsetFontNamedLikeTheSystemFontStaysSeparate)
+{
+    QTemporaryDir dir;
+    const QString pdf = dir.filePath("untagged.pdf");
+    ASSERT_TRUE(makeTextPdf(pdf, {{"Original document", "Second paragraph stays.", "Third line: 12345"}}));
+    const FontMatch sys = FontMatcher::match(QStringLiteral("Arial"), false, false, false, false);
+    ASSERT_TRUE(sys.isValid());
+    QFile ff(sys.filePath);
+    ASSERT_TRUE(ff.open(QIODevice::ReadOnly));
+    const QString psName = pdfedit::fontPostScriptName(ff.readAll());
+    ASSERT_FALSE(psName.isEmpty());
+    {
+        QFile f(pdf);
+        ASSERT_TRUE(f.open(QIODevice::ReadOnly));
+        QByteArray bytes = f.readAll();
+        f.close();
+        const QRegularExpression re(QStringLiteral("/BaseFont\\s*/([A-Za-z0-9+_-]+)"));
+        int replaced = 0;
+        QString latin = QString::fromLatin1(bytes);
+        auto it = re.globalMatch(latin);
+        QList<QRegularExpressionMatch> matches;
+        while (it.hasNext())
+            matches << it.next();
+        for (auto m = matches.crbegin(); m != matches.crend(); ++m) {
+            const QString old = m->captured(1);
+            if (psName.size() > old.size())
+                continue;
+            const QByteArray repl = (psName + QString(old.size() - psName.size(), QLatin1Char(' '))).toLatin1();
+            bytes.replace(int(m->capturedStart(1)), int(old.size()), repl);
+            ++replaced;
+        }
+        ASSERT_GT(replaced, 0) << "font name too short to rename";
+        ASSERT_TRUE(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(bytes);
+    }
+    PdfEditSession s;
+    QString err;
+    ASSERT_EQ(s.open(pdf, {}, &err), PdfEditSession::OpenStatus::Ok) << err.toStdString();
+    // "E" never occurs in the document: the subset lacks it, so the system font is embedded.
+    ASSERT_TRUE(replaceBlockText(s, 0, "Original document", "Edited document", &err)) << err.toStdString();
+    PdfEditSession::SaveOptions o;
+    o.backupDir = dir.filePath("backups");
+    const auto r = s.save(o);
+    ASSERT_TRUE(r.ok) << r.error.toStdString();
+    const QString text = normalized(pdfText(pdf));
+    EXPECT_TRUE(text.contains(normalized("Edited document"))) << text.toStdString();
+    EXPECT_TRUE(text.contains(normalized("Second paragraph stays."))) << text.toStdString();
+    EXPECT_TRUE(text.contains(normalized("Third line: 12345"))) << text.toStdString();
 }
 
 TEST(AutoChange, PolishCharactersRoundTrip)

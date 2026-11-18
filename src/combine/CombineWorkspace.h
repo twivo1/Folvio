@@ -12,6 +12,7 @@
 #include <atomic>
 #include <memory>
 
+class QAction;
 class QButtonGroup;
 class QCheckBox;
 class QComboBox;
@@ -126,6 +127,9 @@ private:
     QPushButton* m_btnUp = nullptr;
     QPushButton* m_btnDown = nullptr;
     QPushButton* m_btnEdit = nullptr;
+    QPushButton* m_btnSort = nullptr;
+    QPushButton* m_btnNextEdit = nullptr;
+    QAction* m_saveProjectAction = nullptr;
     QLabel* m_arrangeInfo = nullptr;
 
     // Edit

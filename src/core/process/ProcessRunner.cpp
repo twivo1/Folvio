@@ -6,6 +6,11 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#else
+#include <csignal>
+#include <sys/prctl.h>
+#include <sys/types.h>
+#include <unistd.h>
 #endif
 
 namespace folvio {
@@ -30,6 +35,29 @@ QString ProcessResult::describe() const
 }
 
 namespace {
+
+#ifndef Q_OS_WIN
+// Inside an AppImage the runtime points LD_LIBRARY_PATH, QT_PLUGIN_PATH etc. into the image.
+// External programs (LibreOffice, FFmpeg, Tesseract) come from the host system and must not
+// load our bundled libraries, so those variables are restored to the host values.
+QProcessEnvironment hostEnvironment(QProcessEnvironment env)
+{
+    if (!qEnvironmentVariableIsSet("APPIMAGE") && !qEnvironmentVariableIsSet("APPDIR"))
+        return env;
+    const char* vars[] = {"LD_LIBRARY_PATH", "LD_PRELOAD", "QT_PLUGIN_PATH", "QT_QPA_PLATFORM_PLUGIN_PATH",
+                          "QML2_IMPORT_PATH", "QTDIR", "PYTHONHOME", "PYTHONPATH", "GDK_PIXBUF_MODULEDIR",
+                          "GDK_PIXBUF_MODULE_FILE", "GIO_MODULE_DIR", "GSETTINGS_SCHEMA_DIR", "XDG_DATA_DIRS"};
+    for (const char* v : vars) {
+        const QString name = QString::fromLatin1(v);
+        const QString orig = env.value(name + QStringLiteral("_ORIG"));
+        if (!orig.isEmpty())
+            env.insert(name, orig);
+        else if (name != QLatin1String("XDG_DATA_DIRS"))
+            env.remove(name);
+    }
+    return env;
+}
+#endif
 
 #ifdef Q_OS_WIN
 class JobObject {
@@ -104,6 +132,13 @@ ProcessResult ProcessRunner::run(const ProcessSpec& spec, const std::function<bo
         a->startupInfo->wShowWindow = SW_HIDE;
     });
     JobObject job(spec.memoryLimitBytes);
+#else
+    p.setProcessEnvironment(hostEnvironment(spec.environment));
+    // Own process group (so cancelling kills the whole tree) and die together with Folvio.
+    p.setChildProcessModifier([] {
+        ::setpgid(0, 0);
+        ::prctl(PR_SET_PDEATHSIG, SIGKILL);
+    });
 #endif
 
     p.start();
@@ -145,6 +180,9 @@ ProcessResult ProcessRunner::run(const ProcessSpec& spec, const std::function<bo
             r.timedOut = timeout && !cancel;
 #ifdef Q_OS_WIN
             job.terminate();
+#else
+            if (p.processId() > 0)
+                ::kill(-static_cast<pid_t>(p.processId()), SIGKILL); // the whole process group
 #endif
             p.kill();
             p.waitForFinished(5000);

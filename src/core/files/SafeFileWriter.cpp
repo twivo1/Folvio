@@ -12,6 +12,11 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#else
+#include <cerrno>
+#include <cstring>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
 
 namespace folvio {
@@ -86,6 +91,15 @@ bool SafeFileWriter::isWritable(const QString& path, QString* reason)
                 *reason = QObject::tr("The file is marked read-only.");
             return false;
         }
+#else
+        // No write bit at all (chmod a-w) is an explicit "read-only" mark, like the Windows attribute;
+        // respect it even when the process could write anyway (root).
+        const auto perms = QFile::permissions(path);
+        if (!(perms & (QFileDevice::WriteOwner | QFileDevice::WriteUser | QFileDevice::WriteGroup | QFileDevice::WriteOther))) {
+            if (reason)
+                *reason = QObject::tr("The file is marked read-only.");
+            return false;
+        }
 #endif
         if (!fi.isWritable()) {
             if (reason)
@@ -142,10 +156,26 @@ bool SafeFileWriter::atomicSwap(const QString& target, const QString& temp, QStr
         *error = QObject::tr("Windows could not move the file into place (error %1).").arg(GetLastError());
     return false;
 #else
-    if (std::rename(QFile::encodeName(temp).constData(), QFile::encodeName(target).constData()) == 0)
+    // Keep the original's permission bits, flush the data, then rename (atomic on POSIX file systems).
+    if (QFileInfo::exists(target))
+        QFile::setPermissions(temp, QFile::permissions(target));
+    {
+        const int fd = ::open(QFile::encodeName(temp).constData(), O_RDONLY);
+        if (fd >= 0) {
+            ::fsync(fd);
+            ::close(fd);
+        }
+    }
+    if (std::rename(QFile::encodeName(temp).constData(), QFile::encodeName(target).constData()) == 0) {
+        const int dirFd = ::open(QFile::encodeName(QFileInfo(target).absolutePath()).constData(), O_RDONLY | O_DIRECTORY);
+        if (dirFd >= 0) {
+            ::fsync(dirFd); // make the rename itself durable
+            ::close(dirFd);
+        }
         return true;
+    }
     if (error)
-        *error = QObject::tr("Could not rename temporary file.");
+        *error = QObject::tr("Could not move the new file into place: %1").arg(QString::fromLocal8Bit(std::strerror(errno)));
     return false;
 #endif
 }
