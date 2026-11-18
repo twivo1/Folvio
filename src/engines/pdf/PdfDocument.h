@@ -95,6 +95,8 @@ public:
     QList<PdfTextRun> textRuns(int page) const;
     // Thin horizontal path objects (table rules, underlines), PDF space.
     QList<QRectF> horizontalRules(int page) const;
+    // Bounds of all non-text page objects (paths, images, shadings, forms), PDF space.
+    QList<QRectF> graphicBounds(int page) const;
     PdfAnalysis analyze() const;
 
     bool isEncrypted() const;

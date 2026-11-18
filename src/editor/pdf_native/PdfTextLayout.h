@@ -14,6 +14,8 @@ struct TextLine {
     QRectF bounds;          // PDF space
     double baseline = 0;    // y of the baseline (PDF space)
     double left = 0;        // x where the line starts (first run origin)
+    bool startsItem = false; // first line of a list item (bullet/number marker)
+    QList<int> markerRuns;   // list marker runs (bullet symbols, "1.") - never part of the editable text
 };
 
 struct TextBlock {
@@ -32,11 +34,19 @@ struct TextBlock {
 };
 
 // Groups PDFium text objects into lines and paragraphs.
+//
+// * Lines never span text columns: runs that are not written consecutively in
+//   the content stream and are separated by a visible gap belong to different
+//   flows (e.g. a date in the left column and a skill list in the right one).
+// * Each list item (bullet/number marker drawn as text or as a small graphic)
+//   starts its own block, so editing one item never reflows the next.
+// * Lines separated by a horizontal rule (table borders) are never merged.
 class PdfTextLayout {
 public:
-    // 'rules' are thin horizontal lines (e.g. table borders); lines separated by a rule
-    // are never merged into one paragraph.
-    static QList<TextBlock> build(const QList<PdfTextRun>& runs, int page, const QList<QRectF>& rules = {});
+    static QList<TextBlock> build(const QList<PdfTextRun>& runs, int page, const QList<QRectF>& rules = {},
+                                  const QList<QRectF>& graphics = {});
+
+    static bool isBulletText(const QString& text);
 };
 
 } // namespace folvio

@@ -372,6 +372,25 @@ QList<QRectF> PdfDocument::horizontalRules(int page) const
     return rules;
 }
 
+QList<QRectF> PdfDocument::graphicBounds(int page) const
+{
+    std::lock_guard lock(pdfiumMutex());
+    QList<QRectF> out;
+    PdfPageHandle p(m_doc, page);
+    if (!p)
+        return out;
+    const int count = FPDFPage_CountObjects(p.get());
+    for (int i = 0; i < count; ++i) {
+        FPDF_PAGEOBJECT obj = FPDFPage_GetObject(p.get(), i);
+        if (FPDFPageObj_GetType(obj) == FPDF_PAGEOBJ_TEXT)
+            continue;
+        float l = 0, b = 0, r = 0, t = 0;
+        if (FPDFPageObj_GetBounds(obj, &l, &b, &r, &t))
+            out << QRectF(QPointF(l, b), QPointF(r, t)).normalized();
+    }
+    return out;
+}
+
 PdfAnalysis PdfDocument::analyze() const
 {
     std::lock_guard lock(pdfiumMutex());

@@ -148,6 +148,8 @@ public:
     // Re-opens the produced bytes and checks the result (page count, edited
     // text present, untouched content unchanged).
     bool verifyOutput(const QByteArray& bytes, QString* error) const;
+    // Test hook: makes verifyOutput() fail, to exercise the failed-save path.
+    static void setVerificationFailureForTesting(bool fail);
 
     // Crash recovery ------------------------------------------------------
     void writeRecovery() const;
@@ -161,8 +163,17 @@ Q_SIGNALS:
     void modifiedChanged(bool modified);
 
 private:
+    // What a rebuild did to one page; used by verifyOutput() to check the saved file.
+    struct PageRecord {
+        QList<int> removedObjects;     // original object indices intentionally removed
+        QStringList insertedTexts;     // exact texts of all inserted text objects
+        QStringList expectedLines;     // every new line of text that must be present
+    };
+
     bool rebuild(QString* error);
     QString recoveryPath() const;
+    QSet<char32_t> embeddedFontChars(const QString& fontName) const;
+    QSet<char32_t> writeCharset() const;
 
     QString m_path;
     QByteArray m_originalBytes;
@@ -175,6 +186,8 @@ private:
     mutable QHash<int, QList<PdfTextRun>> m_runs;
     QHash<quint64, QRectF> m_currentBounds;     // (page << 32 | blockId) -> bounds after edits
     QHash<quint64, AddedItem> m_added;          // (page << 32 | addedId)
+    QHash<int, PageRecord> m_records;           // page -> record of the current rebuild
+    QSet<QString> m_forceSystemFont;            // "page:block:text" lines that failed read-back with the original font
     QList<EditOp> m_ops;
     int m_cursor = 0;
     int m_savedCursor = 0;

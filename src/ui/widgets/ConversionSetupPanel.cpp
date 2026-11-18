@@ -222,7 +222,8 @@ void ConversionSetupPanel::rebuildChips()
 
 void ConversionSetupPanel::rebuildOptions()
 {
-    while (QLayoutItem* item = m_optionsForm->takeAt(0)) {
+    while (m_optionsForm->count() > 0) {
+        QLayoutItem* item = m_optionsForm->takeAt(0);
         if (item->widget())
             item->widget()->deleteLater();
         delete item;

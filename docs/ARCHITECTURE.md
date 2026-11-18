@@ -58,13 +58,22 @@ tests/                   GoogleTest suite
    (only translated if lines were added/removed above them). Changed lines become new text objects inserted at
    the **content-stream position** of the removed ones (reading order preserved), using the original text
    matrix, colour and size. Each word is a separate object positioned with the font's advance widths.
-5. Fonts: subset fonts cannot render new glyphs, so `FontMatcher` maps the PDF font to an installed TrueType
-   family (exact family when available, metric-compatible otherwise) which PDFium embeds as a CID font – any
-   Unicode text, including Polish characters. A warning names the substitution.
-6. Only modified pages get `FPDFPage_GenerateContent`; the rest of the file is untouched (verified by
+5. Fonts (`PdfTextWriter`): a changed line is written with the document's own embedded font when every
+   character is known to exist in it (characters PDFium extracted from that font). Otherwise `FontMatcher`
+   picks an installed TrueType family, embedded via `FPDFText_LoadCidType2Font` with a **Folvio-generated
+   ToUnicode CMap** (PDFium's auto-generated map resolves '-' to U+00AD and ' ' to U+00A0, which corrupted
+   copy/search). Every written object is read back; a mismatch retries with the system font or refuses the edit.
+6. Safety: lines whose characters PDFium cannot map (U+FFFD) are never rewritten; a paragraph may only grow into
+   free space (collision check against other blocks and graphics), otherwise the edit is refused and the
+   document stays unchanged. Lines never span text columns (runs that are not consecutive in the content
+   stream and separated by a gap belong to different flows); list items (text or graphic markers) are separate
+   paragraphs and their markers are never rewritten.
+7. Only modified pages get `FPDFPage_GenerateContent`; the rest of the file is untouched (verified by
    pixel-identical rendering in tests). Signed PDFs are saved incrementally.
-7. Save = `serialize` → `verifyOutput` (re-open, page count, every expected line present, untouched pages'
-   text identical) → `SafeFileWriter::replace`.
+8. Save = `serialize` → `verifyOutput` → `SafeFileWriter::replace`. `verifyOutput` re-opens the bytes and checks,
+   object by object (independent of paragraph detection): untouched pages have identical text; on edited pages
+   the multiset of text objects equals original-minus-intentionally-removed plus inserted; every new line is
+   present in content order; the saved objects equal the in-memory edited document.
 
 ## Safe saving (`SafeFileWriter`)
 

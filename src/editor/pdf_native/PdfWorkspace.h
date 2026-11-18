@@ -66,6 +66,7 @@ public:
     void redo();
     void showFind(bool replace);
     void demoEditFirstParagraph();
+    PdfEditSession* session() const { return m_session.get(); }
 
 Q_SIGNALS:
     void statusChanged();

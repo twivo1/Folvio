@@ -489,10 +489,11 @@ void PdfWorkspace::buildToolbar(QWidget* bar, QWidget* formatBar)
     }
     m_fontBox->setMinimumWidth(150);
     m_sizeBox = new QDoubleSpinBox(formatBar);
-    m_sizeBox->setRange(4, 144);
+    m_sizeBox->setRange(3.5, 144);
     m_sizeBox->setDecimals(1);
     m_sizeBox->setSingleStep(0.5);
     m_sizeBox->setSuffix(" pt");
+    m_sizeBox->setSpecialValueText(QStringLiteral("—")); // shown when no text is being edited
     m_boldBtn = makeToolButton("bold", tr("Bold (Ctrl+B)"), formatBar, true);
     m_italicBtn = makeToolButton("italic", tr("Italic (Ctrl+I)"), formatBar, true);
     m_colorBtn = makeToolButton("text-color", tr("Text colour"), formatBar);
@@ -770,6 +771,7 @@ void PdfWorkspace::updateFormatControls(const TextStyle& s, bool enabled)
         m_colorBtn->setIcon(QIcon(sw));
     } else {
         m_colorBtn->setIcon(Icons::get("text-color"));
+        m_sizeBox->setValue(m_sizeBox->minimum()); // displays the special value text
     }
     m_syncingControls = false;
 }
@@ -1141,7 +1143,26 @@ void PdfWorkspace::commitEdit()
     }
     QString err;
     if (!m_session->apply(op, &err)) {
-        m_banner->show(Banner::Kind::Error, tr("The change could not be applied: %1").arg(err));
+        // Nothing was changed in the document. Keep the user's text in the editor so it can be
+        // shortened or copied, and offer the reconstructed (reflow) editing path.
+        m_editKind = kind;
+        updateFormatControls(m_editStyle, true);
+        applyStyleToEditor();
+        m_editor->show();
+        m_editor->setFocus();
+        if (kind == EditKind::Block)
+            m_canvas->setSelectedBlock(m_editPage, m_editId);
+        m_banner->show(Banner::Kind::Error, tr("This change was not applied: %1").arg(err),
+                       {tr("Use Reflow edit")});
+        disconnect(m_banner, &Banner::actionTriggered, nullptr, nullptr);
+        connect(m_banner, &Banner::actionTriggered, this, [this](int) {
+            cancelEdit();
+            if (!isModified())
+                Q_EMIT reflowRequested(filePath());
+            else
+                QMessageBox::information(this, tr("Reflow editing"),
+                                         tr("Save or undo your other changes first, then switch to Reflow edit."));
+        });
         return;
     }
     showWarnings(m_session->lastWarnings());

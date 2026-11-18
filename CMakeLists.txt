@@ -14,7 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(FOLVIO_BUILD_TESTS "Build the test suite" ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Sql Svg Concurrent)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Sql Svg Concurrent Test)
 
 # ---------------------------------------------------------------------------
 # PDFium (prebuilt, BSD-3 / Apache-2.0) - third_party/pdfium
@@ -85,4 +85,13 @@ install(DIRECTORY "${CMAKE_SOURCE_DIR}/engines/" DESTINATION engines)
 if(FOLVIO_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+
+# ---------------------------------------------------------------------------
+# Developer diagnostics (not installed)
+# ---------------------------------------------------------------------------
+option(FOLVIO_BUILD_TOOLS "Build developer diagnostic tools" ON)
+if(FOLVIO_BUILD_TOOLS)
+    add_executable(pdfdiag tools/pdfdiag/pdfdiag.cpp)
+    target_link_libraries(pdfdiag PRIVATE folvio_lib)
 endif()
