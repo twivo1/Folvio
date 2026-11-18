@@ -1,0 +1,8 @@
+<RCC>
+    <qresource prefix="/branding">
+        <file alias="icon.svg">branding/folvio-icon.svg</file>
+        <file alias="mark-light-bg.svg">branding/folvio-mark-light-bg.svg</file>
+        <file alias="mark-dark-bg.svg">branding/folvio-mark-dark-bg.svg</file>
+        <file alias="mark-mono.svg">branding/folvio-mark-mono.svg</file>
+    </qresource>
+</RCC>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="240 200 580 640" width="580" height="640">
+  <title>Folvio mark (for dark backgrounds)</title>
+  <path d="M300 410 L450 410 L450 780 L300 780 Z" fill="#F2F4F3"/>
+  <path d="M300 260 L300 410 L450 410 Z" fill="#F2F4F3"/>
+  <path d="M300 260 L450 260 L450 410 Z" fill="#12907A"/>
+  <path d="M450 260 L760 260 L760 410 L450 410 Z" fill="#1FC2A2"/>
+  <path d="M450 500 L650 500 L650 640 L450 640 Z" fill="#F2F4F3"/>
+</svg>
