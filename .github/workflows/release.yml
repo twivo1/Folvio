@@ -120,6 +120,10 @@ jobs:
           cat artifacts/windows/installer-test-windows.txt artifacts/linux/clean-systems.log | grep -E "RESULT|selftest exit"
           ! grep -q "FAIL" artifacts/windows/installer-test-windows.txt
           test "$(ls release | wc -l)" -eq 3
+          # Identical copies under fixed names, so README commands can use .../releases/latest/download/<name>.
+          cp release/Folvio-Setup-*-Windows-x64.exe release/Folvio-Setup-Windows-x64.exe
+          cp release/Folvio-*-Linux-x86_64.AppImage release/Folvio-x86_64.AppImage
+          cp release/Folvio-*-Ubuntu-amd64.deb release/folvio_amd64.deb
           (cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
       - name: Create release
         env:

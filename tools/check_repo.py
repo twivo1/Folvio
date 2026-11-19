@@ -23,7 +23,7 @@ SECRET_PATTERNS = [
     (r"xox[baprs]-[A-Za-z0-9-]{10,}", "Slack token"),
     (r"(?i)(password|passwd|secret|api_key|apikey|token)\s*[:=]\s*['\"][^'\"\s]{8,}['\"]", "hard-coded credential"),
 ]
-PERSONAL_PATHS = [r"[A-Za-z]:[\\/]+Users[\\/]+(?!Public|Default)[A-Za-z0-9._-]+[\\/]", r"/home/(?!runner|ubuntu|tester|user)[a-z0-9._-]+/"]
+PERSONAL_PATHS = [r"[A-Za-z]:[\\/]+Users[\\/]+(?!Public|Default)[A-Za-z0-9._-]+[\\/]", r"/home/(?!runner|ubuntu|tester|user|mintuser)[a-z0-9._-]+/"]
 ALLOW_PERSONAL = {"tools/check_repo.py"}
 
 

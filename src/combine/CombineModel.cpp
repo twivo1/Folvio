@@ -421,6 +421,9 @@ void CombineDocument::movePages(QList<int> indices, int destination)
 {
     std::sort(indices.begin(), indices.end());
     indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+    QList<QUuid> before_ids;
+    for (const CombinePage& pg : m_pages)
+        before_ids << pg.id;
     QList<CombinePage> moving;
     int before = 0;
     for (int i : indices)
@@ -435,9 +438,13 @@ void CombineDocument::movePages(QList<int> indices, int destination)
         if (*it >= 0 && *it < m_pages.size())
             m_pages.removeAt(*it);
     int dest = std::clamp(destination - before, 0, int(m_pages.size()));
-    QList<QUuid> oldOrder;
     for (int i = 0; i < moving.size(); ++i)
         m_pages.insert(dest + i, moving[i]);
+    QList<QUuid> after_ids;
+    for (const CombinePage& pg : m_pages)
+        after_ids << pg.id;
+    if (after_ids == before_ids)
+        return; // dropped where it already was: no change, no undo step
     Q_EMIT pagesChanged();
     record(tr("Reorder pages"));
 }

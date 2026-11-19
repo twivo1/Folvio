@@ -5,8 +5,11 @@ keep backups of important documents (Folvio does so by default when it overwrite
 
 ## Platforms
 * Windows 10 (1809+) and 11, x64. The installer is not code-signed yet (SmartScreen warning on first run).
-* Linux x86_64 with glibc 2.39+ (Ubuntu 24.04+, Fedora 40+). Tested in clean Ubuntu 24.04/26.04 and Fedora 43
-  containers with an X server; Wayland was checked through WSLg only, not on a full desktop installation.
+* Linux x86_64 with glibc 2.39+ (Linux Mint 22.x, Ubuntu 24.04+, Fedora 40+). Tested in clean Linux Mint 22.1/22.2,
+  Ubuntu 24.04/26.04 and Fedora 43 containers with an X server; Wayland was checked through WSLg only, not on a
+  full desktop installation. Linux Mint 21.x / Ubuntu 22.04 (glibc 2.35) are not supported.
+* Drag & drop is tested through Qt's real event path, but the operating system's own drag loop (OLE on Windows,
+  X11/Wayland on Linux) cannot be driven by automated tests.
 * Microsoft Word integration (better PDF → DOCX) exists only on Windows. On Linux LibreOffice rebuilds the PDF layout
   with positioned text boxes.
 * FFmpeg, LibreOffice and the Tesseract engine are not bundled (licences of the available builds would require

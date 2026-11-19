@@ -7,16 +7,27 @@ happens in one workspace with three steps: **1 Arrange → 2 Edit → 3 Export**
 
 | File | Layer | Responsibility |
 |---|---|---|
-| `CombineModel.*` | Domain | `CombinePage` (source, rotation, corners, crop, annotations), `Annotation`, `ExportSettings`, `CombineDocument` (ordered pages, snapshot undo/redo up to 200 steps, macros), `PageListModel` (thumbnails, drag & drop reordering) |
+| `CombineModel.*` | Domain | `CombinePage` (source, rotation, corners, crop, annotations), `Annotation`, `ExportSettings`, `CombineDocument` (ordered pages, snapshot undo/redo up to 200 steps, macros), `PageListModel` (thumbnails) |
 | `ImageGeometry.*` | Image processing | `Geometry` (corner validation, ordering, output size, aspect estimation, homography, rotation of corners) and `ImageProcessor` (EXIF-aware loading, rectification with OpenCV `warpPerspective`, page detection, crop, rendering the processing pipeline) |
 | `AnnotationRender.*` | Image processing | Painting, hit testing, erasing and text layout of annotations — shared by the editor, the thumbnails and the export check |
 | `CombinePdfExporter.*` | Export | Page plan (size, orientation, margins, image placement), PDF generation with PDFium, verification after writing, safe write |
 | `CombineSession.*` | Persistence | Import (files, folders, clipboard bitmaps, copied files), autosave/recovery, `.folvio` project files |
+| `PageGridView.*` | GUI | Thumbnail grid (Arrange) and page list (Edit): drag & drop reordering with an insertion line |
 | `PageCanvas.*` | GUI | Interactive editor for one page: perspective handles, crop frame, drawing tools, selection & transform, inline text editor |
 | `CombineWorkspace.*` | GUI | The three-step workspace, options panel, shortcuts, background thumbnails, background export |
 
 The domain, image processing, export and persistence layers have no widget dependencies and are tested
 directly; the GUI is tested end to end through Qt events.
+
+## Reordering pages
+
+The document (`CombineDocument::movePages`) is the only owner of the page order; the views never position
+cards themselves (`QListView::Static`). `PageGridView` handles drag & drop: while dragging it computes the
+insertion index — left/right half of a card in the grid, top/bottom half in the vertical page list, below the
+last row = end, above the first = beginning — and draws a line there. On drop it asks the workspace to move the
+selected rows, which is one undo step (a drop in place changes nothing and is not recorded). Only
+`Qt::MoveAction` is offered, so a drag never duplicates pages, and nothing is removed after the drag loop.
+Buttons and `Ctrl+↑/↓` use the same path. Leaving the view or pressing Escape cancels.
 
 ## Non-destructive processing pipeline
 

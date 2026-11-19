@@ -30,7 +30,7 @@
 | | |
 |---|---|
 | ![Home](docs/screenshots/home.png) **Home** — start from a file or a task | ![Convert](docs/screenshots/convert.png) **Convert** — only conversions the installed engines can really do are offered |
-| ![Combine – arrange](docs/screenshots/combine-arrange.png) **Combine · Arrange** — drop or paste images, reorder pages | ![Combine – perspective](docs/screenshots/combine-perspective.png) **Combine · Perspective** — four corner handles, automatic page detection |
+| ![Combine – arrange](docs/screenshots/combine-arrange.png) **Combine · Arrange** — drag a page; the line shows where it will land | ![Combine – perspective](docs/screenshots/combine-perspective.png) **Combine · Perspective** — four independent corners on a photographed page |
 | ![Combine – annotate](docs/screenshots/combine-annotate.png) **Combine · Edit** — straightened page with highlighter, arrow, frame and text | ![Combine – export](docs/screenshots/combine-export.png) **Combine · Export** — page size, orientation, margins and quality (dark theme) |
 | ![Settings](docs/screenshots/settings.png) **Settings** — engines, backups, privacy | ![Linux](docs/screenshots/linux-ubuntu.png) **Linux** — the same application on Ubuntu 26.04 (.deb package) |
 
@@ -53,60 +53,112 @@ All screenshots are taken from the real application with fictional sample docume
 
 ## Installation
 
-Download the files from the [latest release](https://github.com/twivo1/Folvio/releases/latest). Each release
-lists SHA-256 checksums in `SHA256SUMS.txt`.
+### Quick start
 
-### Windows 10 / 11 (x64)
+| System | Steps |
+|---|---|
+| **Windows 10 / 11** | [Download the installer](https://github.com/twivo1/Folvio/releases/latest/download/Folvio-Setup-Windows-x64.exe) → run it → open **Folvio** from the Start menu |
+| **Linux Mint 22 / Ubuntu 24.04 or newer** | [Download the .deb](https://github.com/twivo1/Folvio/releases/latest/download/folvio_amd64.deb) → open it with the package installer → open **Folvio** from the menu |
+| **Other Linux (x86_64)** | [Download the AppImage](https://github.com/twivo1/Folvio/releases/latest/download/Folvio-x86_64.AppImage) → allow executing → double-click |
 
-1. Download **`Folvio-Setup-<version>-Windows-x64.exe`** and run it.
-2. Follow the wizard. No administrator rights are needed (installs for the current user); a desktop shortcut
-   is offered.
+All files of every version, with SHA-256 checksums (`SHA256SUMS.txt`), are on the
+[Releases page](https://github.com/twivo1/Folvio/releases).
+
+### Windows
+
+1. Download **`Folvio-Setup-Windows-x64.exe`** (same file as `Folvio-Setup-<version>-Windows-x64.exe`) and run it.
+2. Follow the wizard. No administrator rights are needed; a desktop shortcut is offered.
 3. Start **Folvio** from the Start menu or the desktop.
 
-The installer is not code-signed yet, so Windows SmartScreen may show *“Windows protected your PC”*:
-choose **More info → Run anyway**. Uninstall from *Settings → Apps*; your settings and backups in
-`%LOCALAPPDATA%\Folvio` are kept.
+The installer is not code-signed yet, so SmartScreen may show *“Windows protected your PC”*: choose
+**More info → Run anyway**. Uninstall from *Settings → Apps*; your settings and backups are kept.
 
-PDF editing, Combine, image and Markdown conversion and OCR language data work right after installation.
-Audio/video, office documents and the OCR engine use free external programs: open **Settings → Install
-missing engines…** and Folvio installs FFmpeg, LibreOffice and Tesseract with the Windows package manager
-(`winget`, one-time download).
+### Install on Linux Mint / Ubuntu
 
-### Linux — AppImage (any recent x86_64 distribution)
+Recommended for Linux Mint 22.x and Ubuntu 24.04 / 26.04: the `.deb` package (installs into the menu and is
+removed cleanly with the system's package tools).
 
-```bash
-chmod +x Folvio-<version>-Linux-x86_64.AppImage
-./Folvio-<version>-Linux-x86_64.AppImage
-```
+**With the mouse**
 
-Tested on Ubuntu 24.04, Ubuntu 26.04 and Fedora 43 (glibc 2.39 or newer is required). The AppImage uses the
-base libraries every desktop has (OpenGL/EGL, fontconfig, GLib, D-Bus, libtiff, X11/Wayland). For media,
-office and OCR conversions install the engines from your distribution, for example:
+1. Download [`folvio_amd64.deb`](https://github.com/twivo1/Folvio/releases/latest/download/folvio_amd64.deb).
+2. Open the downloaded file (double-click). On Linux Mint it opens in the system's package installer; on
+   Ubuntu right-click → *Open With* → *App Center*. Which program opens `.deb` files depends on the desktop —
+   if none offers to install it, use the terminal command below.
+3. Click **Install** and enter your password.
+4. Start **Folvio** from the application menu.
 
-```bash
-sudo apt install ffmpeg tesseract-ocr libreoffice-writer libreoffice-calc libreoffice-impress   # Ubuntu/Debian
-sudo dnf install ffmpeg-free tesseract libreoffice-writer libreoffice-calc libreoffice-impress  # Fedora
-```
-
-*Troubleshooting:* if the AppImage does not start because FUSE is missing, run it with
-`--appimage-extract-and-run`, or install `fuse3`.
-
-### Ubuntu 24.04+ — .deb package
+**In a terminal — one command** (downloads the official package, installs it with `apt` together with the
+conversion engines):
 
 ```bash
-sudo apt install ./Folvio-<version>-Ubuntu-amd64.deb
+wget -O /tmp/folvio.deb https://github.com/twivo1/Folvio/releases/latest/download/folvio_amd64.deb && sudo apt install /tmp/folvio.deb ffmpeg tesseract-ocr libreoffice-writer libreoffice-calc libreoffice-impress
 ```
 
-Folvio appears in the application menu. `apt` also installs FFmpeg, Tesseract, LibreOffice and the
-metric-compatible fonts as recommended packages (skip them with `--no-install-recommends`).
-Uninstall with `sudo apt remove folvio` — your data in `~/.local/share/Folvio` is kept.
+`apt` checks the system: on an unsupported version it stops with an *unmet dependencies* error and installs
+nothing. A note that the download was performed *unsandboxed as root* is harmless. Folvio itself runs as your
+normal user. Uninstall with `sudo apt remove folvio` (your data in `~/.local/share/Folvio` is kept).
+
+### AppImage (alternative, no installation)
+
+```bash
+wget -O ~/Folvio.AppImage https://github.com/twivo1/Folvio/releases/latest/download/Folvio-x86_64.AppImage && chmod +x ~/Folvio.AppImage && ~/Folvio.AppImage
+```
+
+Without a terminal: download the AppImage, right-click it → *Properties* → *Permissions* → tick
+*Allow executing file as program*, then double-click it. The AppImage does **not** need `libfuse2`; it uses
+`fusermount3` from the `fuse3` package, which Mint and Ubuntu install by default. Install the conversion
+engines separately (next section).
+
+### System requirements
+
+| System | Package | Status |
+|---|---|---|
+| Windows 11, Windows 10 1809 or newer (x64) | installer | tested (Windows 11, Windows Server 2025) |
+| Linux Mint 22.x (22.1, 22.2) | .deb, AppImage | tested in Linux Mint containers (no full desktop VM) |
+| Ubuntu 24.04 LTS, 26.04 LTS | .deb, AppImage | tested (containers, WSLg with Wayland and X11) |
+| Fedora 43 | AppImage | tested (container) |
+| Other x86_64 distributions with glibc 2.39 or newer | AppImage | expected to work, not tested |
+| **Linux Mint 21.x, Ubuntu 22.04** (glibc 2.35), 32-bit or ARM systems | — | **not supported** |
+
+### Optional conversion engines
+
+Folvio installs and runs on its own, but some conversions use free programs that are installed separately
+(Folvio does not bundle them because of their licences). Missing engines only hide the conversions that need
+them; *Settings → Engines* shows what is available.
+
+| Works right after installation | Needs an engine |
+|---|---|
+| PDF text editing (Auto Change), Combine (photos → PDF, perspective, annotations), PDF ↔ images, image formats, Markdown/HTML/CSV/JSON conversions, OCR language data (Polish, English) | **FFmpeg** — audio and video, HEIC/AVIF · **LibreOffice** — DOCX, ODT, XLSX, PPTX, PDF → DOCX · **Tesseract** — OCR engine |
+
+| System | Command |
+|---|---|
+| Linux Mint / Ubuntu | `sudo apt install ffmpeg tesseract-ocr libreoffice-writer libreoffice-calc libreoffice-impress` |
+| Fedora | `sudo dnf install ffmpeg-free tesseract libreoffice-writer libreoffice-calc libreoffice-impress` |
+| Windows | *Settings → Install missing engines…* (uses `winget`; one-time download) |
+
+`tesseract-ocr-pol` and `tesseract-ocr-eng` are not needed: Folvio brings its own Polish and English data.
+On Linux, *Settings → Install missing engines…* shows the right command for your distribution.
+
+### Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `GLIBC_2.38' not found` / *unmet dependencies: libc6 (>= 2.38)* | The system is too old (e.g. Linux Mint 21.x, Ubuntu 22.04). Upgrade to Mint 22 / Ubuntu 24.04. |
+| AppImage: *fusermount3 … not found* / *Cannot mount AppImage* | `sudo apt install fuse3`, or start it with `~/Folvio.AppImage --appimage-extract-and-run` |
+| A conversion is missing / a button is disabled | Install the engine (table above), then *Settings → Detect again* |
+| OCR does not work | Install `tesseract-ocr` (Linux) or use *Install missing engines* (Windows) |
+| Folvio is not in the menu after installing the .deb | Log out and back in, or run `folvio` in a terminal |
+| *Could not load the Qt platform plugin "xcb"* | Run the self-test below and open an issue with its output |
+
+Detailed Linux guide: **[docs/INSTALL_LINUX.md](docs/INSTALL_LINUX.md)**.
 
 ### Check an installation
 
 `folvio --selftest` (Linux) or, on Windows,
-`"%LOCALAPPDATA%\Programs\Folvio\Folvio.exe" --selftest --selftest-report selftest.txt` runs real operations — Combine 3 PNG → PDF,
-PDF edit and save, image/Markdown conversion and, when the engines are present, MP4 → MP3,
-HTML → DOCX → PDF → DOCX and OCR — and writes a report (exit code 0 = everything passed). It never touches your settings or files.
+`"%LOCALAPPDATA%\Programs\Folvio\Folvio.exe" --selftest --selftest-report selftest.txt` runs real operations
+(Combine 3 PNG → PDF, PDF edit and save, conversions and — when the engines are present — MP4 → MP3,
+HTML → DOCX → PDF → DOCX and OCR) and reports the result (exit code 0 = everything passed). It never touches
+your settings or files.
 
 ## Usage
 
@@ -167,7 +219,7 @@ engine installation you start yourself (Windows: `winget`). Macros in office doc
 - **PDF → DOCX** without Microsoft Word (always on Linux) keeps the layout with positioned text boxes, which
   are less convenient to edit than Word's flowing paragraphs.
 - **Codecs** depend on the FFmpeg build you install (e.g. H.265 encoding needs a build with x265).
-- **Platforms**: Linux packages are x86_64 only and need glibc 2.39+ (Ubuntu 24.04, Fedora 40 or newer);
+- **Platforms**: Linux packages are x86_64 only and need glibc 2.39+ (Linux Mint 22, Ubuntu 24.04, Fedora 40 or newer; not Mint 21 / Ubuntu 22.04);
   the Windows installer is not code-signed yet.
 
 More in [docs/LIMITATIONS.md](docs/LIMITATIONS.md).

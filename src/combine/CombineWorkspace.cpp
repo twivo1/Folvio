@@ -2,6 +2,7 @@
 
 #include "combine/AnnotationRender.h"
 #include "combine/ImageGeometry.h"
+#include "combine/PageGridView.h"
 #include "core/persistence/Database.h"
 #include "editor/pdf_native/FontMatcher.h"
 #include "ui/themes/Theme.h"
@@ -219,7 +220,7 @@ CombineWorkspace::CombineWorkspace(QWidget* parent) : QWidget(parent)
     root->addWidget(m_steps, 1);
 
     connect(m_model, &PageListModel::thumbnailNeeded, this, &CombineWorkspace::requestThumbnail);
-    connect(m_model, &PageListModel::externalFilesDropped, this, [this](const QStringList& files, int) { importFiles(files); });
+    connect(m_model, &PageListModel::externalFilesDropped, this, [this](const QStringList& files, int row) { importFiles(files, row); });
     connect(m_doc, &CombineDocument::pageChanged, this, [this](const QUuid& id) {
         m_model->invalidateThumbnail(id);
         const int row = m_doc->indexOf(id);
@@ -463,24 +464,13 @@ QWidget* CombineWorkspace::buildArrange()
     m_drop = new DropZone(tr("Drop images to combine into one PDF"),
                           tr("PNG · JPG · WEBP · BMP · TIFF · HEIC\nYou can also paste screenshots and copied files with Ctrl+V."), w);
     m_drop->setFileFilter(tr("Images (*.png *.jpg *.jpeg *.webp *.bmp *.tif *.tiff *.gif *.heic *.heif *.avif)"));
-    connect(m_drop, &DropZone::filesDropped, this, &CombineWorkspace::importFiles);
-    m_grid = new QListView(w);
+    connect(m_drop, &DropZone::filesDropped, this, qOverload<const QStringList&>(&CombineWorkspace::importFiles));
+    m_grid = new PageGridView(PageGridView::Layout::Grid, w);
     m_grid->setModel(m_model);
     m_grid->setItemDelegate(new PageDelegate(false, m_grid));
-    m_grid->setViewMode(QListView::IconMode);
-    m_grid->setFlow(QListView::LeftToRight);
-    m_grid->setWrapping(true);
-    m_grid->setResizeMode(QListView::Adjust);
-    m_grid->setMovement(QListView::Snap);
     m_grid->setSpacing(4);
-    m_grid->setUniformItemSizes(true);
-    m_grid->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    m_grid->setDragDropMode(QAbstractItemView::DragDrop);
-    m_grid->setDefaultDropAction(Qt::MoveAction);
-    m_grid->setDragEnabled(true);
-    m_grid->setAcceptDrops(true);
-    m_grid->setDropIndicatorShown(true);
     m_grid->setContextMenuPolicy(Qt::CustomContextMenu);
+    connectPageView(m_grid);
     m_grid->installEventFilter(this);
     m_arrangeStack->addWidget(m_drop);
     m_arrangeStack->addWidget(m_grid);
@@ -499,19 +489,13 @@ QWidget* CombineWorkspace::buildArrange()
         QList<int> rows = selectedRows(m_grid);
         if (rows.isEmpty() || rows.first() == 0)
             return;
-        m_doc->movePages(rows, rows.first() - 1);
-        auto* sel = m_grid->selectionModel();
-        for (int r : rows)
-            sel->select(m_model->index(r - 1), QItemSelectionModel::Select);
+        reorderPages(rows, rows.first() - 1);
     });
     connect(m_btnDown, &QPushButton::clicked, this, [this] {
         QList<int> rows = selectedRows(m_grid);
         if (rows.isEmpty() || rows.last() >= m_doc->count() - 1)
             return;
-        m_doc->movePages(rows, rows.last() + 2);
-        auto* sel = m_grid->selectionModel();
-        for (int r : rows)
-            sel->select(m_model->index(r + 1), QItemSelectionModel::Select);
+        reorderPages(rows, rows.last() + 2);
     });
     connect(m_btnDuplicate, &QPushButton::clicked, this, [this] { m_doc->duplicatePages(selectedRows(m_grid)); });
     connect(m_btnRemove, &QPushButton::clicked, this, [this] { m_doc->removePages(selectedRows(m_grid)); });
@@ -549,20 +533,14 @@ bool CombineWorkspace::eventFilter(QObject* watched, QEvent* event)
             }
             if ((k->modifiers() & Qt::ControlModifier) && (k->key() == Qt::Key_Up || k->key() == Qt::Key_Left)) {
                 QList<int> rows = selectedRows(view);
-                if (!rows.isEmpty() && rows.first() > 0) {
-                    m_doc->movePages(rows, rows.first() - 1);
-                    for (int r : rows)
-                        view->selectionModel()->select(m_model->index(r - 1), QItemSelectionModel::Select);
-                }
+                if (!rows.isEmpty() && rows.first() > 0)
+                    reorderPages(rows, rows.first() - 1);
                 return true;
             }
             if ((k->modifiers() & Qt::ControlModifier) && (k->key() == Qt::Key_Down || k->key() == Qt::Key_Right)) {
                 QList<int> rows = selectedRows(view);
-                if (!rows.isEmpty() && rows.last() < m_doc->count() - 1) {
-                    m_doc->movePages(rows, rows.last() + 2);
-                    for (int r : rows)
-                        view->selectionModel()->select(m_model->index(r + 1), QItemSelectionModel::Select);
-                }
+                if (!rows.isEmpty() && rows.last() < m_doc->count() - 1)
+                    reorderPages(rows, rows.last() + 2);
                 return true;
             }
             if (view == m_grid && (k->key() == Qt::Key_Return || k->key() == Qt::Key_Enter)) {
@@ -595,13 +573,58 @@ void CombineWorkspace::openEditor(int row)
 
 // ---- import -------------------------------------------------------------------------
 
+void CombineWorkspace::connectPageView(PageGridView* view)
+{
+    connect(view, &PageGridView::reorderRequested, this, &CombineWorkspace::reorderPages);
+    connect(view, &PageGridView::filesDropped, this, [this](const QStringList& files, int at) { importFiles(files, at); });
+    connect(view, &PageGridView::imageDropped, this, [this](const QImage& image, int at) {
+        QString err;
+        CombinePage page = CombineSession::pageFromImage(image, tr("Dropped image"), &err);
+        ImportResult r;
+        if (page.id.isNull())
+            r.errors << err;
+        else
+            r.pages << page;
+        onImported(r, at);
+    });
+}
+
+void CombineWorkspace::reorderPages(const QList<int>& rows, int insertIndex)
+{
+    QList<QUuid> moved;
+    for (int r : rows)
+        if (r >= 0 && r < m_doc->count())
+            moved << m_doc->page(r).id;
+    m_doc->movePages(rows, insertIndex); // the only place the order changes; recorded for Undo/Redo
+    // Keep the moved pages selected at their new positions in both views.
+    for (QListView* view : {static_cast<QListView*>(m_grid), static_cast<QListView*>(m_pageList)}) {
+        if (!view || !view->selectionModel())
+            continue;
+        QItemSelection sel;
+        for (const QUuid& id : moved) {
+            const int row = m_doc->indexOf(id);
+            if (row >= 0)
+                sel.select(m_model->index(row), m_model->index(row));
+        }
+        view->selectionModel()->select(sel, QItemSelectionModel::ClearAndSelect);
+        if (!moved.isEmpty())
+            view->selectionModel()->setCurrentIndex(m_model->index(m_doc->indexOf(moved.first())), QItemSelectionModel::NoUpdate);
+    }
+    updateActions();
+}
+
 void CombineWorkspace::importFiles(const QStringList& paths)
+{
+    importFiles(paths, -1);
+}
+
+void CombineWorkspace::importFiles(const QStringList& paths, int position)
 {
     if (paths.isEmpty())
         return;
     ++m_importsRunning;
     Q_EMIT statusMessage(tr("Importing %n file(s)…", nullptr, int(paths.size())));
-    const int insertAt = m_doc->count();
+    const int insertAt = position < 0 ? m_doc->count() : position;
     auto* watcher = new QFutureWatcher<ImportResult>(this);
     connect(watcher, &QFutureWatcherBase::finished, this, [this, watcher, insertAt] {
         watcher->deleteLater();
@@ -708,8 +731,9 @@ QWidget* CombineWorkspace::buildEdit()
     };
     const T tools[] = {
         {PageCanvas::Tool::Select, "text-cursor", "Select", "Select, move and resize annotations"},
-        {PageCanvas::Tool::Perspective, "fit-width", "Perspective", "Straighten a photographed page with four corners"},
-        {PageCanvas::Tool::Crop, "ocr", "Crop", "Crop away background"},
+        {PageCanvas::Tool::Perspective, "perspective", "Perspective",
+         "Perspective: move four independent corners onto a photographed page, then Straighten"},
+        {PageCanvas::Tool::Crop, "crop", "Crop", "Crop: cut a straight rectangle out of the page (no straightening)"},
         {PageCanvas::Tool::Pen, "edit", "Pen", "Freehand drawing"},
         {PageCanvas::Tool::Highlighter, "text-color", "Highlighter", "Transparent highlighter"},
         {PageCanvas::Tool::Eraser, "trash", "Eraser", "Erase annotations (the photo is never changed)"},
@@ -718,6 +742,7 @@ QWidget* CombineWorkspace::buildEdit()
     };
     for (const T& t : tools) {
         auto* b = toolButton(QString::fromLatin1(t.icon), tr(t.text), tr(t.tip), bar);
+        b->setObjectName(QStringLiteral("tool-") + QString::fromLatin1(t.text).toLower());
         m_tools->addButton(b, int(t.tool));
         tl->addWidget(b);
         if (t.tool == PageCanvas::Tool::Shape) {
@@ -762,17 +787,10 @@ QWidget* CombineWorkspace::buildEdit()
 
     auto* split = new QSplitter(Qt::Horizontal, w);
     split->setChildrenCollapsible(false);
-    m_pageList = new QListView(split);
+    m_pageList = new PageGridView(PageGridView::Layout::VerticalList, split);
     m_pageList->setModel(m_model);
     m_pageList->setItemDelegate(new PageDelegate(true, m_pageList));
-    m_pageList->setViewMode(QListView::IconMode);
-    m_pageList->setFlow(QListView::TopToBottom);
-    m_pageList->setWrapping(false);
-    m_pageList->setMovement(QListView::Snap);
-    m_pageList->setUniformItemSizes(true);
-    m_pageList->setSelectionMode(QAbstractItemView::ExtendedSelection);
-    m_pageList->setDragDropMode(QAbstractItemView::DragDrop);
-    m_pageList->setDefaultDropAction(Qt::MoveAction);
+    connectPageView(m_pageList);
     m_pageList->setMinimumWidth(170);
     m_pageList->setMaximumWidth(190);
     m_pageList->setFrameShape(QFrame::NoFrame);
@@ -861,8 +879,11 @@ QWidget* CombineWorkspace::buildOptionsPanel()
     pl->setContentsMargins(0, 0, 0, 0);
     pl->setSpacing(8);
     pl->addWidget(sectionTitle(tr("Perspective"), persp));
-    pl->addWidget(muted(tr("Drag the four handles onto the corners of the page, or let Folvio detect them. "
-                           "Arrow keys move the selected corner (Shift = faster), Tab selects the next one."), persp));
+    auto* howTo = new QLabel(tr("Drag each corner to match the corners of your document, then click Straighten."), persp);
+    howTo->setWordWrap(true);
+    pl->addWidget(howTo);
+    pl->addWidget(muted(tr("Every corner moves on its own - any convex four-sided shape works. Arrow keys move the "
+                           "selected corner (Shift = 10x), Tab selects the next one, Detect page finds them for you."), persp));
     auto* detect = new QPushButton(Icons::get("search"), tr("Detect page"), persp);
     auto* resetQ = new QPushButton(tr("Reset corners"), persp);
     auto* order = new QPushButton(tr("Fix corner order"), persp);
@@ -877,6 +898,7 @@ QWidget* CombineWorkspace::buildOptionsPanel()
     for (int i = 0; i < 4; ++i) {
         auto* b = new QToolButton(persp);
         b->setText(cn[i]);
+        b->setObjectName(QStringLiteral("corner%1").arg(i));
         b->setCheckable(true);
         b->setAutoRaise(false);
         b->setToolTip(QStringList{tr("Top left"), tr("Top right"), tr("Bottom right"), tr("Bottom left")}[i]);
@@ -888,6 +910,8 @@ QWidget* CombineWorkspace::buildOptionsPanel()
     form->setFieldGrowthPolicy(QFormLayout::FieldsStayAtSizeHint);
     m_cornerX = new QDoubleSpinBox(persp);
     m_cornerY = new QDoubleSpinBox(persp);
+    m_cornerX->setObjectName(QStringLiteral("cornerX"));
+    m_cornerY->setObjectName(QStringLiteral("cornerY"));
     for (auto* s : {m_cornerX, m_cornerY}) {
         s->setDecimals(0);
         s->setRange(-100000, 100000);
@@ -927,6 +951,7 @@ QWidget* CombineWorkspace::buildOptionsPanel()
     m_quadStatus = muted(QString(), persp);
     pl->addWidget(m_quadStatus);
     m_straighten = makePrimaryButton(tr("Straighten"), persp);
+    m_straighten->setObjectName(QStringLiteral("straighten"));
     m_removeCorrection = new QPushButton(tr("Remove correction"), persp);
     auto* applyAll = new QPushButton(tr("Apply proportions && margin to…"), persp);
     applyAll->setToolTip(tr("Copies the proportions and safety margin settings to other pages. "
@@ -1784,4 +1809,9 @@ void CombineWorkspace::updateActions()
                                : QString());
 }
 
+} // namespace folvio::combine
+
+namespace folvio::combine {
+QListView* CombineWorkspace::arrangeView() const { return m_grid; }
+QListView* CombineWorkspace::editPageList() const { return m_pageList; }
 } // namespace folvio::combine

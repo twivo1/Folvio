@@ -61,6 +61,12 @@ public:
 
     // Import entry points (also used by tests).
     void importFiles(const QStringList& paths);
+    void importFiles(const QStringList& paths, int position); // position < 0: append
+    // Moves the given rows before 'insertIndex' (index in the current order); used by drag & drop,
+    // keyboard and buttons alike.
+    void reorderPages(const QList<int>& rows, int insertIndex);
+    QListView* arrangeView() const;
+    QListView* editPageList() const;
     bool pasteFromClipboard();
     bool importInProgress() const;
     bool exportInProgress() const;
@@ -89,6 +95,7 @@ private:
     QWidget* buildEdit();
     QWidget* buildExport();
     QWidget* buildOptionsPanel();
+    void connectPageView(class PageGridView* view);
     void updateActions();
     void requestThumbnail(const QUuid& id);
     void onImported(const ImportResult& r, int insertAt);
@@ -121,7 +128,7 @@ private:
     // Arrange
     QStackedWidget* m_arrangeStack = nullptr;
     DropZone* m_drop = nullptr;
-    QListView* m_grid = nullptr;
+    class PageGridView* m_grid = nullptr;
     QPushButton* m_btnRemove = nullptr;
     QPushButton* m_btnDuplicate = nullptr;
     QPushButton* m_btnUp = nullptr;
@@ -133,7 +140,7 @@ private:
     QLabel* m_arrangeInfo = nullptr;
 
     // Edit
-    QListView* m_pageList = nullptr;
+    class PageGridView* m_pageList = nullptr;
     QScrollArea* m_scroll = nullptr;
     PageCanvas* m_canvas = nullptr;
     QButtonGroup* m_tools = nullptr;

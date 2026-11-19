@@ -15,6 +15,9 @@ Platform-specific expectations are explicit in the tests: process-tree terminati
 process groups on Linux), font substitution (Windows fonts vs. Liberation/Carlito/DejaVu), read-only files
 (`chmod a-w` is respected even for root).
 
+The Combine GUI tests also pass with `QT_SCALE_FACTOR=1.5` and `2` (high-DPI coordinate mapping).
+`FOLVIO_TEST_SCREENSHOTS=<folder>` saves screenshots of the GUI tests (used for the README).
+
 ## Release packages
 
 * `Folvio --selftest [--selftest-require ffmpeg,soffice,tesseract] [--selftest-report file]` runs real operations of the
@@ -23,6 +26,9 @@ process groups on Linux), font substitution (Windows fonts vs. Liberation/Carlit
 * `packaging/build_release.ps1` runs the self-test on the deployed Windows folder with a minimal `PATH`.
 * `packaging/windows/test_installer.ps1` (CI only) installs the setup into a folder with Polish characters, checks the
   Start menu and desktop shortcuts, self-tests the installed program, uninstalls it and checks that user data is kept.
+* `packaging/linux/mint_test.sh` installs the `.deb` (README command with engines, and without engines) and the
+  AppImage in the official Linux Mint containers as a normal user with sudo, and checks that Mint 21.x refuses
+  the packages with a clear message.
 * `packaging/linux/clean_test.sh` runs in clean `ubuntu:24.04`, `ubuntu:26.04` and `fedora:43` containers: AppImage and
   `.deb`, with and without engines, self-test, window rendering, `apt remove` keeping user data.
 
@@ -51,6 +57,8 @@ process groups on Linux), font substitution (Windows fonts vs. Liberation/Carlit
 | `CombineGui.ImportReorderStraightenAnnotateExportReopen` | End to end through the GUI: import 3 photos, paste a screenshot with Ctrl+V, reorder with Ctrl+Up/Down, drag the four perspective handles with the mouse, Straighten, pen stroke, text box with Polish characters (Ctrl+V inside the text box pastes text, not a page), Ctrl+Z/Ctrl+Y, export, reopen with PDFium: 4 pages, order, straightened page, text |
 | `AutoChange.SubsetFontNamedLikeTheSystemFontStaysSeparate` | Regression found on Linux: a PDF embedding a font subset under the system font's exact PostScript name; edits needing that system font must not merge the two `/Font` resources (verified to fail without the fix on Windows and Linux) |
 | `Ocr.WorksWhenTheLanguageDataPathHasNonAnsiCharacters` | Regression found by the installer test on an English Windows: Tesseract reads arguments in the ANSI code page; Folvio now passes the image through stdin and reads TSV from stdout with relative language data, so folders like "Zażółć" or "Ψ 日本" work (fails without the fix on any Windows) |
+| `CombineArrangeGui.*` (6 tests) | Real GUI drag & drop in Arrange: mouse press and move start the drag in Qt, drag-enter/move/drop events go to the view at real card coordinates (only the OS drag loop is replaced). A,B,C → B,C,A → A,B,C → A,C,B, Ctrl+Z/Ctrl+Y, `.folvio` save/open (order, unique ids), PDF page order by colour; two pages both ways; empty space, cancel, drop in place (no undo step); several selected pages; 40 pages with autoscroll and window resizing; vertical page list in Edit. After every step the on-screen geometry is checked: equal card sizes, no overlap, row-by-row order, numbers on the cards |
+| `CombinePerspectiveGui.FourIndependentCornersStraightenAnyConvexQuad` | Irregular quadrilateral: TL and BR dragged with the mouse (others must not move), TR through the X/Y fields, BL while zoomed to 200 %, Shift+arrows; Straighten; a click on the corrected preview shows the corners again without moving them; result compared with the original document; Crop changes only its rectangle; exported PDF checked |
 | `CombineGui.ActionsAreDisabledWhenTheyCannotRun` | *Next: Edit*, *Sort by name*, *Remove* enabled only when they can act |
 | `FormatDetector.*`, `PathUtils.*`, `SafeFileWriter.*`, `TextData.*`, `Planner.*`, `OutputValidator.*` | Units: magic bytes, sanitizing, CSV/JSON rules, route planning, missing dependencies, truncated outputs |
 

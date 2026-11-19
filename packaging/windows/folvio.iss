@@ -2,7 +2,7 @@
 ; Built by packaging\build_release.ps1 - expects the deployed app in dist\Folvio.
 
 #ifndef AppVersion
-  #define AppVersion "0.10.0"
+  #define AppVersion "0.10.1"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\..\dist\Folvio"

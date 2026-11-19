@@ -504,8 +504,11 @@ void PageCanvas::removePerspective()
 
 void PageCanvas::setCompareMode(CompareMode m)
 {
+    if (m_compare == m)
+        return;
     m_compare = m;
     relayout();
+    Q_EMIT perspectiveChanged();
 }
 
 // ---- crop -------------------------------------------------------------------------
@@ -775,13 +778,29 @@ void PageCanvas::paintEvent(QPaintEvent* e)
             shadow(cr);
             p.drawImage(cr, corr);
             p.setPen(c.textMuted);
-            p.drawText(QPointF(cr.left(), cr.top() - 8), tr("Corrected preview"));
+            p.drawText(QPointF(cr.left(), cr.top() - 8), tr("Corrected preview - click the image to adjust the corners"));
             return;
         }
     }
     const QImage img = displayImage();
     shadow(r);
     p.drawImage(r, img);
+    if (m_tool == Tool::Perspective || m_tool == Tool::Crop) {
+        // Which tool is active must be obvious: Perspective moves four free corners, Crop a rectangle.
+        const QString label = m_tool == Tool::Perspective ? tr("PERSPECTIVE  ·  4 independent corners")
+                                                          : tr("CROP  ·  rectangle");
+        QFont f = font();
+        f.setBold(true);
+        f.setPointSizeF(8.5);
+        p.setFont(f);
+        const double bw = QFontMetricsF(f).horizontalAdvance(label) + 16;
+        const QRectF badge(r.right() - bw, r.top() - 24, bw, 20); // right edge: the left keeps the Original label
+        p.setPen(Qt::NoPen);
+        p.setBrush(m_tool == Tool::Perspective ? c.accent : c.warning);
+        p.drawRoundedRect(badge, 4, 4);
+        p.setPen(m_tool == Tool::Perspective ? c.accentText : QColor(Qt::white));
+        p.drawText(badge, Qt::AlignCenter, label);
+    }
 
     if (m_tool == Tool::Perspective) {
         if (m_compare == CompareMode::Split) {
@@ -991,6 +1010,14 @@ void PageCanvas::pressAt(const QPointF& pos, double pressure, Qt::MouseButton bu
     case Tool::Perspective: {
         if (!m_quad || button != Qt::LeftButton)
             return;
+        if (m_compare != CompareMode::Original) {
+            // The corrected preview has no handles; show the photo with its corners instead of
+            // silently moving a corner the user cannot see.
+            setCompareMode(CompareMode::Original);
+            Q_EMIT message(tr("Showing the original photo: drag each corner to match the corners of your document, "
+                              "then click Straighten."), false);
+            return;
+        }
         int best = -1;
         double bestD = 1e9;
         for (int i = 0; i < 4; ++i) {
@@ -1266,6 +1293,11 @@ void PageCanvas::commitWorking(const QString& description)
 
 void PageCanvas::keyPressEvent(QKeyEvent* e)
 {
+    if (m_tool == Tool::Perspective && m_quad && m_compare != CompareMode::Original
+        && (e->key() == Qt::Key_Left || e->key() == Qt::Key_Right || e->key() == Qt::Key_Up || e->key() == Qt::Key_Down)) {
+        setCompareMode(CompareMode::Original); // corners are edited on the original photo only
+        return;
+    }
     if (m_tool == Tool::Perspective && m_quad) {
         const double step = (e->modifiers() & Qt::ShiftModifier ? 10.0 : 1.0) * double(rotatedSourceSize().width()) / std::max(1.0, imageRect().width());
         QPointF d;
