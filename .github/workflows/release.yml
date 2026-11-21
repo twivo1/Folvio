@@ -54,12 +54,29 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.verify.outputs.sha }}
+      - &test-python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - &ocr-tests
+        name: Prepare real and synthetic handwriting OCR tests
+        shell: bash
+        run: |
+          python -m pip install onnxruntime==1.31.1 opencv-python-headless==4.10.0.84 numpy==2.2.6 pyarrow==26.0.1 pyyaml==6.0.4
+          python tools/handwriting_eval/prepare_release.py
       - name: Build environment image
         run: docker build -t folvio-build packaging/linux
       - name: Build, all tests, AppImage and .deb
         run: |
-          docker run --rm -v "$PWD:/src" -w /src folvio-build packaging/linux/build_linux.sh
+          docker run --rm -v "$PWD:/src" -w /src \
+            -v "$FOLVIO_HANDWRITING_MODELS:/models:ro" -e FOLVIO_HANDWRITING_MODELS=/models \
+            -v "$FOLVIO_HANDWRITING_SAMPLES:/samples:ro" -e FOLVIO_HANDWRITING_SAMPLES=/samples \
+            -e FOLVIO_NETWORK_TESTS=1 folvio-build packaging/linux/build_linux.sh
           sudo chown -R "$(id -u):$(id -g)" dist build
+          if grep -Eq '^\[  SKIPPED \] [0-9]+ tests?\.' dist/linux/linux-tests.log; then
+            echo "The Linux release suite must run every case" >&2
+            exit 1
+          fi
       - name: Clean systems - AppImage and .deb with engines (Ubuntu 24.04, 26.04, Fedora 43)
         run: |
           set -eo pipefail
@@ -96,21 +113,11 @@ jobs:
       - name: Engines the way Folvio installs them for users (winget - FFmpeg, LibreOffice, Tesseract)
         shell: pwsh
         run: packaging/windows/install_engines.ps1
-      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.13'
+      - *test-python
       - name: Python packages used by the tests (independent PDF reader, EXIF writer)
         shell: pwsh
         run: python -m pip install --quiet pypdf==7.1.1 pillow==13.0.0
-      - name: Prepare real and synthetic handwriting OCR tests
-        shell: pwsh
-        run: |
-          python -m venv "$env:RUNNER_TEMP/ocr-venv"
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          $python = "$env:RUNNER_TEMP/ocr-venv/Scripts/python.exe"
-          & $python -m pip install onnxruntime==1.31.1 opencv-python-headless==4.10.0.84 numpy==2.2.6 pyarrow==26.0.1 pyyaml==6.0.4
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          & $python packaging/windows/prepare_ocr_tests.py
+      - *ocr-tests
       - name: Build, all tests (with engines), deployment, self-test, installer
         shell: pwsh
         run: packaging/build_release.ps1 -QtDir C:\Qt\6.10.0\mingw_64 -QtTools C:\Qt\Tools
