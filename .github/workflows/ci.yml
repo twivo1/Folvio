@@ -21,8 +21,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Secrets, personal paths, large files, versions, pinned actions
         run: python3 tools/check_repo.py
-      - name: Shell scripts parse
-        run: for f in tools/*.sh packaging/linux/*.sh; do bash -n "$f"; done
+      - name: Check shell syntax and executable bits from checkout
+        run: |
+          for f in tools/*.sh packaging/linux/*.sh; do
+            test -x "$f"
+            bash -n "$f"
+          done
 
   linux:
     name: Linux (Ubuntu 24.04 container) - build, tests, packages
@@ -47,6 +51,7 @@ jobs:
             dist/linux/Folvio-*.AppImage
             dist/linux/Folvio-*.deb
             dist/linux/linux-tests.log
+          if-no-files-found: error
           retention-days: 7
 
   windows:
@@ -77,4 +82,5 @@ jobs:
           path: |
             dist/Folvio-Setup-*.exe
             dist/selftest-windows.txt
+          if-no-files-found: error
           retention-days: 7

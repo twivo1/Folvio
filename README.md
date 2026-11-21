@@ -10,14 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/twivo1/Folvio/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/twivo1/Folvio?include_prereleases&label=release"></a>
-  <a href="https://github.com/twivo1/Folvio/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/twivo1/Folvio/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/twivo1/Folvio/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/twivo1/Folvio?label=release"></a>
+  <a href="https://github.com/twivo1/Folvio/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/twivo1/Folvio/actions/workflows/ci.yml/badge.svg?branch=main"></a>
   <img alt="Platforms" src="https://img.shields.io/badge/platforms-Windows%2010%2F11%20%7C%20Linux%20x86__64-1f6f5c">
   <a href="LICENSE"><img alt="Licence: MIT" src="https://img.shields.io/badge/licence-MIT-1f6f5c"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/twivo1/Folvio/releases/latest"><b>Download</b></a> ·
+  <a href="https://github.com/twivo1/Folvio/releases"><b>Download</b></a> ·
   <a href="#installation">Installation</a> ·
   <a href="#supported-formats">Formats</a> ·
   <a href="#limitations">Limitations</a>
@@ -59,6 +59,9 @@ All screenshots are taken from the real application with fictional sample docume
 ## Installation
 
 ### Quick start
+
+The download links below target the latest stable release. Until the first release is published,
+use the [build instructions](#build-from-source) or check the [release list](https://github.com/twivo1/Folvio/releases).
 
 | System | Steps |
 |---|---|

@@ -72,7 +72,9 @@ def main():
             problems.append(f"version mismatch: CMakeLists.txt {version} vs {name} {v}")
     tag = os.environ.get("RELEASE_TAG", "")
     if tag:
-        base = tag[1:] if tag.startswith("v") else tag
+        if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?", tag):
+            problems.append(f"invalid release tag: {tag}")
+        base = tag.removeprefix("v")
         if base.split("-")[0] != version:
             problems.append(f"tag {tag} does not match CMakeLists.txt version {version}")
 

@@ -458,11 +458,27 @@ TEST(CombineTextGui, TransparentBoxLiveFormattingMoveResizeAndPdf)
     // 7. Narrower with the side handle: the text re-wraps, the font size stays, the height grows (Auto size).
     QRectF sel(e.canvas->fromPage(movedT.rect.topLeft()), e.canvas->fromPage(movedT.rect.bottomRight()));
     sel.adjust(-4, -4, 4, 4);
-    drag(e.canvas, QPointF(sel.right(), sel.center().y()), QPointF(sel.right() - sel.width() * 0.45, sel.center().y()));
+    // Choose a width between a single word and its complete line, using the
+    // embedded font's advances in page units. A fixed percentage can leave both paragraphs intact.
+    const double wordWidth = std::max(AnnotationRender::textAdvance(movedT, "Hello"),
+                                      AnnotationRender::textAdvance(movedT, "World"));
+    const double lineWidth = AnnotationRender::textAdvance(movedT, "Hello World");
+    const double targetWidth = (wordWidth + lineWidth) / 2;
+    ASSERT_LE(lineWidth, movedT.rect.width());
+    const QPointF grip(sel.right(), sel.center().y());
+    const double dx = e.canvas->fromPage(QPointF(targetWidth, 0)).x()
+                    - e.canvas->fromPage(QPointF(movedT.rect.width(), 0)).x();
+    drag(e.canvas, grip, grip + QPointF(dx, 0));
     const Annotation narrow = e.ws.document()->page(0).annotations[0];
     EXPECT_LT(narrow.rect.width(), movedT.rect.width());
     EXPECT_DOUBLE_EQ(narrow.fontSize, movedT.fontSize);
-    EXPECT_GT(AnnotationRender::layoutText(narrow).size(), AnnotationRender::layoutText(movedT).size());
+    ASSERT_TRUE(narrow.autoSize);
+    EXPECT_GT(narrow.rect.height(), movedT.rect.height());
+    const auto wrapped = AnnotationRender::layoutText(narrow);
+    ASSERT_GE(wrapped.size(), 3);
+    EXPECT_EQ(wrapped[0].text, QStringLiteral("Hello"));
+    EXPECT_EQ(wrapped[1].text, QStringLiteral("World"));
+    EXPECT_GT(wrapped.size(), AnnotationRender::layoutText(movedT).size());
     EXPECT_GE(narrow.rect.height(), AnnotationRender::textHeight(narrow) - 1e-9);
     // Bottom handle: a taller box switches Auto size off; it can never become shorter than the text.
     sel = QRectF(e.canvas->fromPage(narrow.rect.topLeft()), e.canvas->fromPage(narrow.rect.bottomRight())).adjusted(-4, -4, 4, 4);

@@ -49,7 +49,7 @@ if (-not $SkipTests) {
     Push-Location (Join-Path $build 'tests')
     # A test blocked by an unexpected modal dialog must fail the build, not hang it (limit: 45 minutes).
     try {
-        $tests = Start-Process -FilePath '.\folvio_tests.exe' -ArgumentList '--gtest_brief=1' -NoNewWindow -PassThru
+        $tests = Start-Process -FilePath '.\folvio_tests.exe' -ArgumentList '--gtest_brief=1','--gtest_output=xml:results.xml' -NoNewWindow -PassThru
         if (-not $tests.WaitForExit(45 * 60 * 1000)) {
             Stop-Process -Id $tests.Id -Force
             throw "folvio_tests did not finish within 45 minutes (blocked test?)"
