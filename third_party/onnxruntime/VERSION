@@ -1,0 +1,2 @@
+ONNX Runtime 1.31.1 (Microsoft.ML.OnnxRuntime NuGet package, sha256 6871ccbc97f3d5bdb4095a1dcec33aa78d56f6ed8de5980ef5fa1d9f2e7c679a)
+Headers: build/native/include of that package. Runtime libraries: tools/fetch_onnxruntime.{ps1,sh} -> lib/ (not committed).

@@ -1,0 +1,4 @@
+2026-11-18 18:49:01,922 - aqt.helper - DEBUG - helper 51936 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6100/qt6_6100/Updates.xml.sha256
+2026-11-18 18:49:04,255 - aqt.helper - DEBUG - helper 29908 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/tools_mingw1310/Updates.xml.sha256
+2026-11-18 18:49:05,556 - aqt.helper - DEBUG - helper 58864 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/tools_cmake/Updates.xml.sha256
+2026-11-18 18:49:06,857 - aqt.helper - DEBUG - helper 4532 Attempt to download checksum at https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/tools_ninja/Updates.xml.sha256

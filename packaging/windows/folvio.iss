@@ -1,0 +1,94 @@
+; Folvio installer (Inno Setup 6)
+; Built by packaging\build_release.ps1 - expects the deployed app in dist\Folvio.
+
+#ifndef AppVersion
+  #define AppVersion "0.11.0"
+#endif
+#ifndef SourceDir
+  #define SourceDir "..\..\dist\Folvio"
+#endif
+#ifndef OutputDir
+  #define OutputDir "..\..\dist"
+#endif
+
+[Setup]
+AppId={{A36CF9A8-7919-4117-9EE2-39806CBE94B2}
+AppName=Folvio
+AppVersion={#AppVersion}
+AppVerName=Folvio {#AppVersion}
+AppPublisher=Bartosz Skrzypiec
+AppPublisherURL=https://github.com/twivo1/Folvio
+AppSupportURL=https://github.com/twivo1/Folvio/issues
+AppUpdatesURL=https://github.com/twivo1/Folvio/releases
+AppCopyright=Copyright (c) 2026 Bartosz Skrzypiec
+VersionInfoVersion={#AppVersion}
+VersionInfoProductName=Folvio
+; Per-user install by default (no administrator rights needed); admins may choose all users.
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
+DefaultDirName={autopf}\Folvio
+DefaultGroupName=Folvio
+DisableProgramGroupPage=yes
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+MinVersion=10.0.17763
+OutputDir={#OutputDir}
+OutputBaseFilename=Folvio-Setup-{#AppVersion}-Windows-x64
+SetupIconFile=..\..\assets\branding\folvio.ico
+UninstallDisplayIcon={app}\Folvio.exe
+UninstallDisplayName=Folvio
+WizardStyle=modern
+WizardImageFile=..\..\assets\branding\installer-wizard.bmp
+WizardSmallImageFile=..\..\assets\branding\installer-small.bmp
+Compression=lzma2/max
+SolidCompression=yes
+CloseApplications=yes
+RestartApplications=no
+LicenseFile=..\..\LICENSE
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "polish"; MessagesFile: "compiler:Languages\Polish.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
+
+[InstallDelete]
+; Updates: remove Qt plugins and libraries of older versions that the new one no longer ships (e.g. Qt PDF,
+; a second PDFium, from versions before 0.10.0) - Qt would still load plugins left in these folders.
+; Program folder only; user data lives in %LOCALAPPDATA%\Folvio and is never touched.
+Type: filesandordirs; Name: "{app}\imageformats"
+Type: filesandordirs; Name: "{app}\sqldrivers"
+Type: filesandordirs; Name: "{app}\tls"
+Type: filesandordirs; Name: "{app}\generic"
+Type: filesandordirs; Name: "{app}\networkinformation"
+Type: filesandordirs; Name: "{app}\platforms"
+Type: filesandordirs; Name: "{app}\styles"
+Type: filesandordirs; Name: "{app}\iconengines"
+Type: files; Name: "{app}\Qt6Pdf.dll"
+
+[Files]
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+; {autoprograms} / {autodesktop} resolve the real known folders (Start menu, Desktop),
+; including a Desktop redirected to OneDrive.
+Name: "{autoprograms}\Folvio"; Filename: "{app}\Folvio.exe"; IconFilename: "{app}\Folvio.exe"; Comment: "Convert and edit documents"
+Name: "{autodesktop}\Folvio"; Filename: "{app}\Folvio.exe"; IconFilename: "{app}\Folvio.exe"; Comment: "Convert and edit documents"; Tasks: desktopicon
+
+[Registry]
+; "Open with" registration (no default handler is changed).
+Root: HKA; Subkey: "Software\Classes\Applications\Folvio.exe"; ValueType: string; ValueName: "FriendlyAppName"; ValueData: "Folvio"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\Applications\Folvio.exe\shell\open\command"; ValueType: string; ValueData: """{app}\Folvio.exe"" ""%1"""
+Root: HKA; Subkey: "Software\Classes\Applications\Folvio.exe\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\Folvio.exe\SupportedTypes"; ValueType: string; ValueName: ".docx"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\Folvio.exe\SupportedTypes"; ValueType: string; ValueName: ".odt"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\Applications\Folvio.exe\SupportedTypes"; ValueType: string; ValueName: ".rtf"; ValueData: ""
+Root: HKA; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: none; ValueName: "Applications\Folvio.exe"; Flags: uninsdeletevalue
+
+[Run]
+Filename: "{app}\Folvio.exe"; Description: "{cm:LaunchProgram,Folvio}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Program files only. User data (%LOCALAPPDATA%\Folvio: settings, backups) is intentionally kept.
+Type: filesandordirs; Name: "{app}\engines"

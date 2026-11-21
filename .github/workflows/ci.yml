@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Repository checks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Secrets, personal paths, large files, versions, pinned actions
+        run: python3 tools/check_repo.py
+      - name: Shell scripts parse
+        run: for f in tools/*.sh packaging/linux/*.sh; do bash -n "$f"; done
+
+  linux:
+    name: Linux (Ubuntu 24.04 container) - build, tests, packages
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build environment image
+        run: docker build -t folvio-build packaging/linux
+      - name: Build, run all tests (X11/Xvfb, unprivileged user), AppImage and .deb
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src folvio-build packaging/linux/build_linux.sh
+          sudo chown -R "$(id -u):$(id -g)" dist build
+      - name: Smoke test AppImage on a clean Ubuntu 24.04
+        run: docker run --rm -v "$PWD/dist/linux:/out" -v "$PWD/packaging/linux:/scripts:ro" ubuntu:24.04 bash /scripts/clean_test.sh appimage no
+      - name: Upload Linux packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: folvio-linux
+          path: |
+            dist/linux/Folvio-*.AppImage
+            dist/linux/Folvio-*.deb
+            dist/linux/linux-tests.log
+          retention-days: 7
+
+  windows:
+    name: Windows (MinGW, Qt 6.10) - build, tests, installer
+    needs: checks
+    runs-on: windows-2025
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Qt 6.10.0, MinGW 13.1, CMake, Ninja (aqtinstall, pinned)
+        shell: pwsh
+        run: packaging/windows/install_toolchain.ps1 -Root C:\Qt
+      - name: Python packages used by the tests (independent PDF reader, EXIF writer)
+        shell: pwsh
+        run: python -m pip install --quiet pypdf==7.1.1 pillow==13.0.0
+      - name: Cache OpenCV
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: third_party/opencv
+          key: opencv-4.10.0-mingw1310-${{ hashFiles('tools/build_opencv.ps1') }}
+      - name: Build, test, deploy, self-test and installer
+        shell: pwsh
+        run: packaging/build_release.ps1 -QtDir C:\Qt\6.10.0\mingw_64 -QtTools C:\Qt\Tools
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: folvio-windows
+          path: |
+            dist/Folvio-Setup-*.exe
+            dist/selftest-windows.txt
+          retention-days: 7

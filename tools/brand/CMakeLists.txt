@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.24)
+project(FolvioBrandTool LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 20)
+find_package(Qt6 REQUIRED COMPONENTS Gui Svg)
+add_executable(folvio_brand brand.cpp)
+target_link_libraries(folvio_brand PRIVATE Qt6::Gui Qt6::Svg)

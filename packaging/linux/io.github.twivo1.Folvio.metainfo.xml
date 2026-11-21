@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.twivo1.Folvio</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Folvio</name>
+  <summary>Convert, edit and combine files in one desktop workspace</summary>
+  <description>
+    <p>Folvio converts documents, images, audio and video, edits the text of existing PDFs in place,
+    adds a searchable OCR layer to scans and combines photos of paper pages into one straightened PDF.
+    Everything runs locally, without an account or uploads.</p>
+  </description>
+  <launchable type="desktop-id">io.github.twivo1.Folvio.desktop</launchable>
+  <url type="homepage">https://github.com/twivo1/Folvio</url>
+  <url type="bugtracker">https://github.com/twivo1/Folvio/issues</url>
+  <developer id="io.github.twivo1">
+    <name>Bartosz Skrzypiec</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.11.0" date="2026-11-19" type="development"/>
+    <release version="0.10.1" date="2026-11-19"/>
+    <release version="0.10.0" date="2026-11-18"/>
+  </releases>
+</component>

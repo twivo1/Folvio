@@ -1,0 +1,11 @@
+/build/
+/dist/
+*.user
+.vs/
+.vscode/
+compile_commands.json
+/dist/
+/third_party/src/
+/third_party/opencv/
+/third_party/pdfium-linux/
+/third_party/onnxruntime/lib/
