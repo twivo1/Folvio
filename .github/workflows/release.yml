@@ -19,12 +19,27 @@ env:
 
 jobs:
   verify:
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
     name: Verify tag and repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
+          ref: refs/tags/${{ env.TAG }}
+      - name: Require successful main CI for the tagged commit
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          result=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&head_sha=$sha&per_page=100" \
+            --jq '[.workflow_runs[] | select(.event == "push" or .event == "workflow_dispatch")] | first | .conclusion')
+          test "$result" = success
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - name: Tag matches CMakeLists.txt, installer and metainfo versions; repository hygiene
         run: RELEASE_TAG="$TAG" python3 tools/check_repo.py
       - name: Release notes exist
@@ -38,13 +53,30 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.verify.outputs.sha }}
+      - &test-python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - &ocr-tests
+        name: Prepare real and synthetic handwriting OCR tests
+        shell: bash
+        run: |
+          python -m pip install onnxruntime==1.31.1 opencv-python-headless==4.10.0.84 numpy==2.2.6 pyarrow==26.0.1 pyyaml==6.0.4
+          python tools/handwriting_eval/prepare_release.py
       - name: Build environment image
         run: docker build -t folvio-build packaging/linux
       - name: Build, all tests, AppImage and .deb
         run: |
-          docker run --rm -v "$PWD:/src" -w /src folvio-build packaging/linux/build_linux.sh
+          docker run --rm -v "$PWD:/src" -w /src \
+            -v "$FOLVIO_HANDWRITING_MODELS:/models:ro" -e FOLVIO_HANDWRITING_MODELS=/models \
+            -v "$FOLVIO_HANDWRITING_SAMPLES:/samples:ro" -e FOLVIO_HANDWRITING_SAMPLES=/samples \
+            -e FOLVIO_NETWORK_TESTS=1 folvio-build packaging/linux/build_linux.sh
           sudo chown -R "$(id -u):$(id -g)" dist build
+          if grep -Eq '^\[  SKIPPED \] [0-9]+ tests?\.' dist/linux/linux-tests.log; then
+            echo "The Linux release suite must run every case" >&2
+            exit 1
+          fi
       - name: Clean systems - AppImage and .deb with engines (Ubuntu 24.04, 26.04, Fedora 43)
         run: |
           set -eo pipefail
@@ -59,6 +91,7 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux
+          if-no-files-found: error
           path: |
             dist/linux/Folvio-*.AppImage
             dist/linux/Folvio-*.deb
@@ -73,42 +106,71 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.verify.outputs.sha }}
       - name: Toolchain (Qt 6.10.0, MinGW 13.1, CMake, Ninja, Inno Setup)
         shell: pwsh
         run: packaging/windows/install_toolchain.ps1 -Root C:\Qt
       - name: Engines the way Folvio installs them for users (winget - FFmpeg, LibreOffice, Tesseract)
         shell: pwsh
         run: packaging/windows/install_engines.ps1
+      - *test-python
       - name: Python packages used by the tests (independent PDF reader, EXIF writer)
         shell: pwsh
         run: python -m pip install --quiet pypdf==7.1.1 pillow==13.0.0
+      - *ocr-tests
       - name: Build, all tests (with engines), deployment, self-test, installer
         shell: pwsh
         run: packaging/build_release.ps1 -QtDir C:\Qt\6.10.0\mingw_64 -QtTools C:\Qt\Tools
-      - name: Installer on this machine (no Qt or MinGW in PATH) - install, shortcuts, self-test, uninstall
+      - name: Reject skipped release tests
         shell: pwsh
         run: |
-          $setup = Get-ChildItem dist\Folvio-Setup-*-Windows-x64.exe | Select-Object -First 1
-          packaging\windows\test_installer.ps1 -Setup $setup.FullName -Require 'ffmpeg,soffice,tesseract' -Report dist\installer-test-windows.txt
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          [xml]$results = Get-Content build/release/tests/results.xml -Raw
+          if (-not $results.SelectSingleNode('//testcase') -or $results.SelectNodes('//testcase[not(@result="completed")]').Count) {
+            throw 'The Windows release suite must run every case'
+          }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: windows
+          if-no-files-found: error
           path: |
             dist/Folvio-Setup-*-Windows-x64.exe
             dist/selftest-windows.txt
-            dist/installer-test-windows.txt
+
+  windows-install:
+    name: Install and uninstall on a fresh Windows runner
+    needs: [verify, windows]
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: windows
+          path: dist
+      - shell: pwsh
+        run: packaging/windows/install_engines.ps1
+      - shell: pwsh
+        run: |
+          $setup = @(Get-ChildItem dist/Folvio-Setup-*-Windows-x64.exe)
+          if ($setup.Count -ne 1) { throw 'Expected one Windows installer' }
+          packaging/windows/test_installer.ps1 -Setup $setup[0].FullName -Require 'ffmpeg,soffice,tesseract' -Report dist/installer-test-windows.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-validation
+          if-no-files-found: error
+          path: dist/installer-test-windows.txt
 
   publish:
     name: Publish GitHub release
-    needs: [linux, windows]
+    needs: [verify, linux, windows-install]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.verify.outputs.sha }}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           path: artifacts
@@ -117,8 +179,8 @@ jobs:
           set -e
           mkdir release
           cp artifacts/windows/Folvio-Setup-*-Windows-x64.exe artifacts/linux/Folvio-*.AppImage artifacts/linux/Folvio-*.deb release/
-          cat artifacts/windows/installer-test-windows.txt artifacts/linux/clean-systems.log | grep -E "RESULT|selftest exit"
-          ! grep -q "FAIL" artifacts/windows/installer-test-windows.txt
+          grep -Fxq "RESULT: OK" <(tr -d '\r' < artifacts/windows-validation/installer-test-windows.txt)
+          test "$(grep -c '^selftest exit: 0$' artifacts/linux/clean-systems.log)" -eq 6
           test "$(ls release | wc -l)" -eq 3
           # Identical copies under fixed names, so README commands can use .../releases/latest/download/<name>.
           cp release/Folvio-Setup-*-Windows-x64.exe release/Folvio-Setup-Windows-x64.exe
@@ -132,4 +194,5 @@ jobs:
           set -e
           flags=""
           case "$TAG" in *-*) flags="--prerelease" ;; esac
+          test "$(git ls-remote origin "refs/tags/$TAG^{}" "refs/tags/$TAG" | tail -1 | cut -f1)" = "$(git rev-parse HEAD)"
           gh release create "$TAG" release/* --title "Folvio ${TAG#v}" --notes-file "docs/release-notes/${TAG}.md" $flags --verify-tag

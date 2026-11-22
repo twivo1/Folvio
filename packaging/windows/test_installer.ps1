@@ -28,6 +28,9 @@ $p = Start-Process -FilePath $setupPath -ArgumentList @('/VERYSILENT', '/SUPPRES
 if ($p.ExitCode -ne 0) { Fail "installer exit code $($p.ExitCode)" }
 $exe = Join-Path $dir 'Folvio.exe'
 if (-not (Test-Path $exe)) { Fail "Folvio.exe not installed in $dir" }
+foreach ($relative in 'pdfium.dll','onnxruntime.dll','platforms/qwindows.dll','sqldrivers/qsqlite.dll','tls/qschannelbackend.dll') {
+    if (-not (Test-Path -LiteralPath (Join-Path $dir $relative) -PathType Leaf)) { Fail "missing installed file: $relative" }
+}
 Note "PASS install into '$dir'"
 
 # Shell.Application reads the link as Unicode (WScript.Shell's TargetPath goes through the ANSI code page
@@ -50,11 +53,11 @@ try {
     if ($Require) { $args += @('--selftest-require', $Require) }
     $st = Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait
     $shot = Join-Path $env:TEMP 'folvio-installed.png'
-    Start-Process -FilePath $exe -ArgumentList @('--page', '6', '--screenshot', "`"$shot`"", '--screenshot-delay', '2500') -Wait
+    $render = Start-Process -PassThru -FilePath $exe -ArgumentList @('--page', '6', '--screenshot', "`"$shot`"", '--screenshot-delay', '2500') -Wait
 } finally { $env:PATH = $savedPath }
 Get-Content $selfReport | ForEach-Object { Note "   $_" }
 if ($st.ExitCode -ne 0) { Fail "self-test of the installed program failed" }
-if (-not (Test-Path $shot)) { Fail "installed program did not render its window" }
+if ($render.ExitCode -ne 0 -or -not (Test-Path $shot) -or (Get-Item $shot).Length -eq 0) { Fail "installed program did not render its window" }
 Note "PASS installed program: self-test and window"
 
 # User data that must survive uninstallation.

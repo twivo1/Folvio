@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Smoke test of the release packages inside a clean distribution container (no Qt, no build tools).
 # Usage (artifacts mounted at /out): clean_test.sh appimage|deb yes|no   (yes = install FFmpeg, LibreOffice, Tesseract)
-set -uo pipefail
+set -euo pipefail
 MODE="$1"; ENGINES="$2"
 . /etc/os-release; echo "### $PRETTY_NAME - $MODE - engines=$ENGINES"
 if command -v apt-get >/dev/null; then
@@ -24,21 +24,26 @@ else
       libwayland-client dejavu-sans-fonts which >/dev/null
   [[ $ENGINES == yes ]] && dnf install -y -q ffmpeg-free tesseract libreoffice-writer libreoffice-calc libreoffice-impress >/dev/null
 fi
-useradd -m tester 2>/dev/null
+useradd -m tester
 if [[ $MODE == deb ]]; then
   CMD="folvio"
+  test -x /opt/folvio/bin/folvio
+  test -s /usr/share/applications/io.github.twivo1.Folvio.desktop
   echo "installed: $(dpkg -s folvio | grep Version)"
 else
   cp /out/Folvio-*-Linux-x86_64.AppImage /home/tester/Folvio.AppImage && chmod +x /home/tester/Folvio.AppImage
   CMD="/home/tester/Folvio.AppImage --appimage-extract-and-run"
 fi
 REQ=""; [[ $ENGINES == yes ]] && REQ="--selftest-require ffmpeg,soffice,tesseract"
-su tester -c "cd ~ && xvfb-run -a $CMD --selftest $REQ" ; RC=$?
-echo "selftest exit: $RC"
-su tester -c "cd ~ && xvfb-run -a -s '-screen 0 1600x1000x24' $CMD --page 6 --screenshot /tmp/shot.png --screenshot-delay 2500 >/dev/null 2>&1"; echo "gui screenshot exit: $? size: $(stat -c %s /tmp/shot.png 2>/dev/null)"
+su tester -c "cd ~ && xvfb-run -a $CMD --selftest $REQ"
+echo "selftest exit: 0"
+su tester -c "cd ~ && xvfb-run -a -s '-screen 0 1600x1000x24' $CMD --page 6 --screenshot /tmp/shot.png --screenshot-delay 2500 >/dev/null 2>&1"
+test -s /tmp/shot.png
 cp /tmp/shot.png "/out/shot-${ID}${VERSION_ID}-${MODE}-${ENGINES}.png" 2>/dev/null
 if [[ $MODE == deb ]]; then
   su tester -c "mkdir -p ~/.local/share/Folvio && echo keep > ~/.local/share/Folvio/user-data.txt"
-  apt-get remove -y -qq folvio >/dev/null; echo "after remove: binary=$(ls /opt/folvio/bin/folvio 2>&1 | head -1) desktop=$(ls /usr/share/applications/io.github.twivo1.Folvio.desktop 2>&1 | head -1) userdata=$(cat /home/tester/.local/share/Folvio/user-data.txt)"
+  apt-get remove -y -qq folvio >/dev/null
+  test ! -e /opt/folvio/bin/folvio
+  test ! -e /usr/share/applications/io.github.twivo1.Folvio.desktop
+  test "$(cat /home/tester/.local/share/Folvio/user-data.txt)" = keep
 fi
-exit $RC

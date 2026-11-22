@@ -24,6 +24,7 @@
 #include <QListView>
 #include <QPainter>
 #include <QPlainTextEdit>
+#include <QRegion>
 #include <QScrollArea>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -353,6 +354,10 @@ TEST(CombineTextGui, TransparentBoxLiveFormattingMoveResizeAndPdf)
     img.save(file, "PNG");
     Editor e;
     ASSERT_TRUE(e.open(file));
+    // Keep the drag distances in page units when DPI changes the canvas's fit scale.
+    const auto dragByPageDelta = [&](QPointF from, QPointF delta) {
+        drag(e.canvas, from, from + e.canvas->fromPage(delta) - e.canvas->fromPage(QPointF()));
+    };
 
     // 1. New text box: the page stays visible under it (no white rectangle).
     e.tool("text");
@@ -425,13 +430,13 @@ TEST(CombineTextGui, TransparentBoxLiveFormattingMoveResizeAndPdf)
     EXPECT_EQ(e.ws.document()->count(), pages);
     // 5. Move and resize while typing: the Move tab and the right handle.
     const QRectF before = e.canvas->editingText()->rect;
-    drag(e.canvas, e.canvas->editMoveGrip().center(), e.canvas->editMoveGrip().center() + QPointF(60, 40));
+    dragByPageDelta(e.canvas->editMoveGrip().center(), QPointF(0.05, 0.035));
     EXPECT_TRUE(editor->isVisible()) << "moving the box ended typing";
     EXPECT_GT(e.canvas->editingText()->rect.left(), before.left());
     EXPECT_GT(e.canvas->editingText()->rect.top(), before.top());
     const QRectF moved = e.canvas->editingText()->rect;
     const QRectF right = e.canvas->editResizeHandles().value(0);
-    drag(e.canvas, right.center(), right.center() + QPointF(120, 0));
+    dragByPageDelta(right.center(), QPointF(0.14, 0));
     EXPECT_GT(e.canvas->editingText()->rect.width(), moved.width());
     EXPECT_NEAR(e.canvas->editingText()->fontSize * 595.0, 24.0, 0.01) << "resizing the box must not scale the font";
 
@@ -449,7 +454,7 @@ TEST(CombineTextGui, TransparentBoxLiveFormattingMoveResizeAndPdf)
     e.tool("select");
     const QPointF centre = e.canvas->fromPage(t.rect.center());
     QTest::mouseClick(e.canvas, Qt::LeftButton, {}, centre.toPoint());
-    drag(e.canvas, centre, centre + QPointF(-40, 70));
+    dragByPageDelta(centre, QPointF(-0.03, 0.06));
     const Annotation movedT = e.ws.document()->page(0).annotations[0];
     EXPECT_GT(movedT.rect.top(), t.rect.top());
     EXPECT_EQ(movedT.text, t.text) << "a drag must move, not edit";
@@ -458,11 +463,27 @@ TEST(CombineTextGui, TransparentBoxLiveFormattingMoveResizeAndPdf)
     // 7. Narrower with the side handle: the text re-wraps, the font size stays, the height grows (Auto size).
     QRectF sel(e.canvas->fromPage(movedT.rect.topLeft()), e.canvas->fromPage(movedT.rect.bottomRight()));
     sel.adjust(-4, -4, 4, 4);
-    drag(e.canvas, QPointF(sel.right(), sel.center().y()), QPointF(sel.right() - sel.width() * 0.45, sel.center().y()));
+    // Choose a width between a single word and its complete line, using the
+    // embedded font's advances in page units. A fixed percentage can leave both paragraphs intact.
+    const double wordWidth = std::max(AnnotationRender::textAdvance(movedT, "Hello"),
+                                      AnnotationRender::textAdvance(movedT, "World"));
+    const double lineWidth = AnnotationRender::textAdvance(movedT, "Hello World");
+    const double targetWidth = (wordWidth + lineWidth) / 2;
+    ASSERT_LE(lineWidth, movedT.rect.width());
+    const QPointF grip(sel.right(), sel.center().y());
+    const double dx = e.canvas->fromPage(QPointF(targetWidth, 0)).x()
+                    - e.canvas->fromPage(QPointF(movedT.rect.width(), 0)).x();
+    drag(e.canvas, grip, grip + QPointF(dx, 0));
     const Annotation narrow = e.ws.document()->page(0).annotations[0];
     EXPECT_LT(narrow.rect.width(), movedT.rect.width());
     EXPECT_DOUBLE_EQ(narrow.fontSize, movedT.fontSize);
-    EXPECT_GT(AnnotationRender::layoutText(narrow).size(), AnnotationRender::layoutText(movedT).size());
+    ASSERT_TRUE(narrow.autoSize);
+    EXPECT_GT(narrow.rect.height(), movedT.rect.height());
+    const auto wrapped = AnnotationRender::layoutText(narrow);
+    ASSERT_GE(wrapped.size(), 3);
+    EXPECT_EQ(wrapped[0].text, QStringLiteral("Hello"));
+    EXPECT_EQ(wrapped[1].text, QStringLiteral("World"));
+    EXPECT_GT(wrapped.size(), AnnotationRender::layoutText(movedT).size());
     EXPECT_GE(narrow.rect.height(), AnnotationRender::textHeight(narrow) - 1e-9);
     // Bottom handle: a taller box switches Auto size off; it can never become shorter than the text.
     sel = QRectF(e.canvas->fromPage(narrow.rect.topLeft()), e.canvas->fromPage(narrow.rect.bottomRight())).adjusted(-4, -4, 4, 4);
@@ -481,8 +502,11 @@ TEST(CombineTextGui, TransparentBoxLiveFormattingMoveResizeAndPdf)
     e.ws.activateWindow();
     ASSERT_TRUE(QTest::qWaitForWindowActive(&e.ws, 3000));
     e.canvas->setFocus();
-    QTest::keyClick(e.canvas, Qt::Key_C, Qt::ControlModifier);
-    QTRY_COMPARE_WITH_TIMEOUT(QApplication::clipboard()->text(), shortest.text, 3000);
+    // Retry the copy itself: the Windows clipboard can be temporarily busy.
+    ASSERT_TRUE(QTest::qWaitFor([&] {
+        QTest::keyClick(e.canvas, Qt::Key_C, Qt::ControlModifier);
+        return QApplication::clipboard()->text() == shortest.text;
+    }, 3000)) << "copying the selected annotation did not put its text on the clipboard";
     QTest::keyClick(e.canvas, Qt::Key_V, Qt::ControlModifier);
     ASSERT_EQ(e.ws.document()->page(0).annotations.size(), 2);
     EXPECT_EQ(e.ws.document()->page(0).annotations[1].text, shortest.text);
@@ -519,24 +543,42 @@ TEST(CombineTextGui, TransparentBoxLiveFormattingMoveResizeAndPdf)
     ASSERT_TRUE(exported.first().first().toBool()) << e.ws.lastExportError().toStdString();
     auto pdf = PdfDocument::openFile(pdfPath);
     ASSERT_TRUE(pdf);
-    const QString text = pdf->pageText(0);
-    EXPECT_TRUE(text.contains("Hello")) << text.toStdString();
-    EXPECT_TRUE(text.contains(QString::fromUtf8("Zażółć"))) << text.toStdString();
+    EXPECT_EQ(pdf->pageText(0).simplified(), shortest.text.simplified());
     const QImage page = pdf->render(0, 1.0);
+    ASSERT_FALSE(page.isNull());
     const QRectF tb(shortest.rect.left() * page.width(), shortest.rect.top() * page.width(), shortest.rect.width() * page.width(),
                     shortest.rect.height() * page.width());
-    int red = 0, white = 0, total = 0;
-    for (int y = int(tb.top()); y < int(tb.bottom()); y += 2)
-        for (int x = int(tb.left()); x < int(tb.right()); x += 2) {
-            if (x < 0 || y < 0 || x >= page.width() || y >= page.height())
-                continue;
-            const QColor c(page.pixel(x, y));
+    const auto analysis = pdf->analyze();
+    ASSERT_EQ(analysis.pages.size(), 1);
+    const auto& objects = analysis.pages[0];
+    EXPECT_GT(objects.textObjects, 0);
+    EXPECT_EQ(objects.imageObjects, 1);
+    EXPECT_EQ(objects.pathObjects, 0) << "a vector fill or selection frame was exported";
+    EXPECT_EQ(objects.formObjects, 0);
+
+    // Include the edge of the box, but exclude glyph bounds and their antialiasing fringe.
+    const QRect sample = tb.toAlignedRect().adjusted(-2, -2, 2, 2);
+    ASSERT_TRUE(page.rect().contains(sample))
+        << "sample (" << sample.left() << ", " << sample.top() << ") to (" << sample.right() << ", "
+        << sample.bottom() << ") outside the " << page.width() << " x " << page.height() << " PDF raster";
+    QRegion background(sample);
+    const QTransform toPixels = pdf->pageToDevice(0, page.size());
+    for (const auto& run : pdf->textRuns(0))
+        background -= toPixels.mapRect(run.bounds).toAlignedRect().adjusted(-2, -2, 2, 2);
+
+    int red = 0;
+    int sampled = 0;
+    int changed = 0;
+    for (int y = sample.top(); y <= sample.bottom(); ++y)
+        for (int x = sample.left(); x <= sample.right(); ++x) {
+            const QColor c = page.pixelColor(x, y);
             red += near(c, QColor(220, 0, 0), 70) ? 1 : 0;
-            white += near(c, Qt::white, 20) ? 1 : 0;
-            ++total;
+            if (background.contains(QPoint(x, y))) {
+                ++sampled;
+                changed += !near(c, photo, 30) ? 1 : 0;
+            }
         }
     EXPECT_GT(red, 10) << "no red text in the PDF";
-    EXPECT_EQ(white, 0) << "a white box was exported behind the text";
-    // The edges of the box are photo colour: no selection frame in the PDF.
-    EXPECT_TRUE(near(QColor(page.pixel(int(tb.left()) + 1, int(tb.bottom()) - 1)), photo, 30));
+    EXPECT_GT(sampled, 100) << "too little background sampled around the glyphs";
+    EXPECT_EQ(changed, 0) << "background pixels changed near the exported text";
 }
